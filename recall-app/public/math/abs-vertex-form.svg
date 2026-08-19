@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" width="200" height="160">
+  <!-- Axes -->
+  <line x1="20" y1="90" x2="180" y2="90" stroke="#374151" stroke-width="1.5"/>
+  <line x1="100" y1="10" x2="100" y2="150" stroke="#374151" stroke-width="1.5"/>
+  <!-- Original: |x| in gray dashed -->
+  <polyline points="40,150 100,90 160,150" fill="none" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <!-- Transformed: |x-3|+2 in blue -->
+  <polyline points="70,150 130,50 190,150" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Vertex dots -->
+  <circle cx="100" cy="90" r="3" fill="#9ca3af"/>
+  <circle cx="130" cy="50" r="4" fill="#3b82f6"/>
+  <!-- Arrow showing shift -->
+  <path d="M 103,87 L 127,53" fill="none" stroke="#ef4444" stroke-width="1" stroke-dasharray="2,2" marker-end="url(#arrow)"/>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444"/></marker></defs>
+  <!-- Labels -->
+  <text x="30" y="148" font-size="9" fill="#9ca3af" font-family="sans-serif">f(x)=|x|</text>
+  <text x="140" y="45" font-size="9" fill="#3b82f6" font-family="sans-serif">g(x)=|x-3|+2</text>
+  <text x="132" y="63" font-size="8" fill="#6b7280" font-family="sans-serif">(3,2)</text>
+  <text x="105" y="102" font-size="8" fill="#6b7280" font-family="sans-serif">(0,0)</text>
+  <!-- h and k annotations -->
+  <text x="110" y="80" font-size="8" fill="#ef4444" font-family="sans-serif">h=3, k=2</text>
+</svg>
