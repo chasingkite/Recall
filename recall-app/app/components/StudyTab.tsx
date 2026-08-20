@@ -84,7 +84,7 @@ function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCa
     }
 
     if (roll === 1) {
-      // Multiple choice: use other cards as distractors
+      // Multiple choice: use other cards as distractors (ALL subjects)
       const distractors = allCards
         .filter((c) => c.id !== card.id && c.subject === card.subject)
         .sort(() => Math.random() - 0.5)
@@ -107,33 +107,36 @@ function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCa
     }
 
     if (roll === 3) {
-      // True/false: only for language cards where "X means Y" makes sense
-      if (card.subject === "spanish") {
-        const isTrue = Math.random() > 0.5;
-        if (isTrue) {
+      // True/false: works for all subjects with different phrasing
+      const isTrue = Math.random() > 0.5;
+      if (isTrue) {
+        const statement = card.subject === "spanish"
+          ? `"${card.front}" means "${card.back}"`
+          : `The answer to "${card.front.slice(0, 60)}" is "${card.back.slice(0, 60)}"`;
+        return {
+          ...card,
+          answerType: "true-false" as const,
+          trueFalseStatement: statement,
+          trueFalseAnswer: true,
+          back: "true",
+        };
+      } else {
+        const wrongAnswer = allCards
+          .filter((c) => c.id !== card.id && c.subject === card.subject)
+          .sort(() => Math.random() - 0.5)[0];
+        if (wrongAnswer) {
+          const statement = card.subject === "spanish"
+            ? `"${card.front}" means "${wrongAnswer.back}"`
+            : `The answer to "${card.front.slice(0, 60)}" is "${wrongAnswer.back.slice(0, 60)}"`;
           return {
             ...card,
             answerType: "true-false" as const,
-            trueFalseStatement: `"${card.front}" means "${card.back}"`,
-            trueFalseAnswer: true,
-            back: "true",
+            trueFalseStatement: statement,
+            trueFalseAnswer: false,
+            back: "false",
           };
-        } else {
-          const wrongAnswer = allCards
-            .filter((c) => c.id !== card.id && c.subject === card.subject)
-            .sort(() => Math.random() - 0.5)[0];
-          if (wrongAnswer) {
-            return {
-              ...card,
-              answerType: "true-false" as const,
-              trueFalseStatement: `"${card.front}" means "${wrongAnswer.back}"`,
-              trueFalseAnswer: false,
-              back: "false",
-            };
-          }
         }
       }
-      // Non-Spanish: standard type-in
       return card;
     }
 
