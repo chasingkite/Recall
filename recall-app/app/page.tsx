@@ -39,7 +39,7 @@ export default function Home() {
 
       if (data) {
         setProfile(data);
-        if (data.canvas_student_id) setTab("dashboard");
+        if (data.canvas_student_id || data.role === "admin") setTab("dashboard");
       }
       setLoading(false);
     }
@@ -64,7 +64,8 @@ export default function Home() {
 
   const tabs: Tab[] = [];
   tabs.push("dashboard");
-  tabs.push("study", "progress", "rewards");
+  tabs.push("study", "progress");
+  if (!isAdmin) tabs.push("rewards");
   if (isAdmin) tabs.push("admin");
 
   return (

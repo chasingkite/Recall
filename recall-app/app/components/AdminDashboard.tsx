@@ -163,7 +163,7 @@ function StudentDetail({ student }: { student: StudentSummary }) {
 }
 
 function CanvasSummary({ studentId }: { studentId: string }) {
-  const [courses, setCourses] = useState<{ name: string; grade: string | null; score: number | null; assignments: { status: string; dueAt?: string }[] }[]>([]);
+  const [courses, setCourses] = useState<{ name: string; grade: string | null; score: number | null; assignments: { name: string; status: string; dueAt?: string; score?: number | null; pointsPossible?: number | null; courseName?: string }[] }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -180,9 +180,16 @@ function CanvasSummary({ studentId }: { studentId: string }) {
     return <div className="flex justify-center py-4"><div className="animate-spin h-5 w-5 border-3 border-blue-500 border-t-transparent rounded-full" /></div>;
   }
 
-  const totalAssignments = courses.reduce((sum, c) => sum + c.assignments.length, 0);
-  const completedAssignments = courses.reduce((sum, c) => sum + c.assignments.filter((a) => a.status === "graded" || a.status === "submitted").length, 0);
-  const overdueAssignments = courses.reduce((sum, c) => sum + c.assignments.filter((a) => a.status === "unsubmitted" && a.dueAt && new Date(a.dueAt) < new Date()).length, 0);
+  const allAssignments = courses.flatMap((c) => c.assignments.map((a) => ({ ...a, courseName: c.name.split("-")[0].replace(/^\d+\s*/, "").trim() })));
+  const totalAssignments = allAssignments.length;
+  const completedAssignments = allAssignments.filter((a) => a.status === "graded" || a.status === "submitted").length;
+
+  const now = new Date();
+  const weekFromNow = new Date(now.getTime() + 7 * 86400000);
+
+  const overdue = allAssignments.filter((a) => a.status === "unsubmitted" && a.dueAt && new Date(a.dueAt) < now);
+  const dueSoon = allAssignments.filter((a) => a.dueAt && new Date(a.dueAt) >= now && new Date(a.dueAt) <= weekFromNow).sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime());
+  const recentlySubmitted = allAssignments.filter((a) => a.status === "graded" || a.status === "submitted").slice(-5).reverse();
 
   return (
     <div>
@@ -193,7 +200,7 @@ function CanvasSummary({ studentId }: { studentId: string }) {
           <div className="text-xs text-gray-500">Complete</div>
         </div>
         <div className="bg-red-50 rounded-xl p-3 text-center">
-          <div className="text-lg font-bold text-red-700">{overdueAssignments}</div>
+          <div className="text-lg font-bold text-red-700">{overdue.length}</div>
           <div className="text-xs text-gray-500">Overdue</div>
         </div>
         <div className="bg-blue-50 rounded-xl p-3 text-center">
@@ -202,7 +209,8 @@ function CanvasSummary({ studentId }: { studentId: string }) {
         </div>
       </div>
 
-      <div className="space-y-2">
+      {/* Grades */}
+      <div className="space-y-2 mb-6">
         {courses.map((c) => (
           <div key={c.name} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
             <span className="text-xs text-gray-700">{c.name.split("-")[0].replace(/^\d+\s*/, "").trim()}</span>
@@ -210,6 +218,47 @@ function CanvasSummary({ studentId }: { studentId: string }) {
           </div>
         ))}
       </div>
+
+      {/* Overdue */}
+      {overdue.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">Overdue ({overdue.length})</h3>
+          <div className="space-y-1.5">
+            {overdue.map((a, i) => (
+              <div key={i} className="border-l-3 border-red-500 bg-red-50 rounded-r-lg p-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-900 truncate max-w-[70%]">{a.name}</span>
+                  <span className="text-xs text-red-600">{a.dueAt ? new Date(a.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
+                </div>
+                <span className="text-xs text-gray-500">{a.courseName}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Due Soon */}
+      {dueSoon.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Due This Week ({dueSoon.length})</h3>
+          <div className="space-y-1.5">
+            {dueSoon.map((a, i) => (
+              <div key={i} className="border-l-3 border-amber-400 bg-amber-50 rounded-r-lg p-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-900 truncate max-w-[70%]">{a.name}</span>
+                  <span className="text-xs text-amber-700">{a.dueAt ? new Date(a.dueAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : ""}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">{a.courseName}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${a.status === "submitted" || a.status === "graded" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                    {a.status === "graded" ? "Done" : a.status === "submitted" ? "Turned in" : "Not submitted"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { createClient } from "../lib/supabase/client";
 import { SAMPLE_CARDS, StudyCard, MAX_SESSION_SIZE } from "../lib/sample-cards";
 import { checkAnswer, sm2Review, qualityFromResult } from "../lib/spaced-repetition";
 import { recordReview, recordSessionComplete } from "../lib/study-stats";
@@ -20,12 +21,47 @@ const SUBJECT_COLORS: Record<string, string> = {
 type SessionState = "active" | "revealed" | "complete";
 type SubjectFilter = "all" | "spanish" | "biology" | "english" | "math";
 
+interface DBCard {
+  id: string;
+  front: string;
+  back: string;
+  answer_type: string;
+  explanation: string | null;
+  real_world_connection: string | null;
+  tok_connection: string | null;
+  interdisciplinary: string | null;
+  inquiry_question: string | null;
+  example_sentence: string | null;
+  image_url: string | null;
+  audio_lang: string;
+  decks: { subject: string } | null;
+}
+
+function dbCardToStudyCard(c: DBCard): StudyCard {
+  return {
+    id: c.id,
+    front: c.front,
+    back: c.back,
+    answerType: (c.answer_type || "type") as StudyCard["answerType"],
+    explanation: c.explanation || "",
+    realWorldConnection: c.real_world_connection || "",
+    tokConnection: c.tok_connection || "",
+    interdisciplinary: c.interdisciplinary || "",
+    inquiryQuestion: c.inquiry_question || "",
+    exampleSentence: c.example_sentence || undefined,
+    imageUrl: c.image_url || undefined,
+    audioLang: c.audio_lang || "en-US",
+    subject: (c.decks?.subject || "english") as StudyCard["subject"],
+    easiness: 2.5,
+    interval: 0,
+    repetitions: 0,
+    nextReviewAt: new Date(),
+  };
+}
+
 export default function StudyTab() {
   const [subjectFilter, setSubjectFilter] = useState<SubjectFilter>("all");
-  const [cards, setCards] = useState<StudyCard[]>(() => {
-    const due = SAMPLE_CARDS.filter((c) => new Date(c.nextReviewAt) <= new Date());
-    return due.sort(() => Math.random() - 0.5).slice(0, MAX_SESSION_SIZE);
-  });
+  const [cards, setCards] = useState<StudyCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [state, setState] = useState<SessionState>("active");
   const [userAnswer, setUserAnswer] = useState("");
@@ -36,16 +72,41 @@ export default function StudyTab() {
   const [hintUsed, setHintUsed] = useState(false);
   const [gaveUp, setGaveUp] = useState(false);
   const [remainingDue, setRemainingDue] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const supabase = createClient();
 
-  const startSession = useCallback((subject: SubjectFilter) => {
-    setSubjectFilter(subject);
-    const due = SAMPLE_CARDS.filter((c) => {
-      const isDue = new Date(c.nextReviewAt) <= new Date();
-      if (subject === "all") return isDue;
-      return isDue && c.subject === subject;
-    }).sort(() => Math.random() - 0.5);
-    setRemainingDue(Math.max(0, due.length - MAX_SESSION_SIZE));
-    setCards(due.slice(0, MAX_SESSION_SIZE));
+  const loadCards = useCallback(async (subject: SubjectFilter) => {
+    setLoading(true);
+
+    let query = supabase
+      .from("cards")
+      .select("*, decks(subject)")
+      .order("created_at");
+
+    if (subject !== "all") {
+      query = supabase
+        .from("cards")
+        .select("*, decks!inner(subject)")
+        .eq("decks.subject", subject)
+        .order("created_at");
+    }
+
+    const { data } = await query;
+
+    let studyCards: StudyCard[];
+    if (data && data.length > 0) {
+      studyCards = (data as DBCard[]).map(dbCardToStudyCard);
+    } else {
+      // Fallback to hardcoded cards if Supabase is empty
+      studyCards = SAMPLE_CARDS.filter((c) => {
+        if (subject === "all") return true;
+        return c.subject === subject;
+      });
+    }
+
+    const shuffled = studyCards.sort(() => Math.random() - 0.5);
+    setRemainingDue(Math.max(0, shuffled.length - MAX_SESSION_SIZE));
+    setCards(shuffled.slice(0, MAX_SESSION_SIZE));
     setCurrentIndex(0);
     setState("active");
     setUserAnswer("");
@@ -53,7 +114,17 @@ export default function StudyTab() {
     setCorrectCount(0);
     setHintUsed(false);
     setGaveUp(false);
-  }, []);
+    setLoading(false);
+  }, [supabase]);
+
+  useEffect(() => {
+    loadCards("all");
+  }, [loadCards]);
+
+  const startSession = useCallback((subject: SubjectFilter) => {
+    setSubjectFilter(subject);
+    loadCards(subject);
+  }, [loadCards]);
 
   const currentCard = cards[currentIndex];
 
@@ -152,6 +223,14 @@ export default function StudyTab() {
     startSession(subjectFilter);
   }, [startSession, subjectFilter]);
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
   if (cards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -196,7 +275,7 @@ export default function StudyTab() {
         front={
           <div className="flex flex-col items-center gap-2 w-full">
             <div className="flex items-center gap-2">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${SUBJECT_COLORS[currentCard.subject]}`}>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${SUBJECT_COLORS[currentCard.subject] || "bg-gray-100 text-gray-700"}`}>
                 {currentCard.subject}
               </span>
               <span className="text-xs text-gray-400 capitalize">{currentCard.answerType.replace("-", " ")}</span>
@@ -227,28 +306,36 @@ export default function StudyTab() {
             {currentCard.imageUrl && (
               <img src={currentCard.imageUrl} alt="" className="w-full max-w-[140px] h-auto rounded-lg" />
             )}
-            {!isCorrect && (
+            {!isCorrect && currentCard.explanation && (
               <div className="w-full bg-red-50 border border-red-200 rounded-lg p-2">
                 <p className="text-xs font-medium text-red-800 mb-1">Why?</p>
                 <p className="text-xs text-red-700">{currentCard.explanation}</p>
               </div>
             )}
-            <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-2">
-              <p className="text-xs font-medium text-blue-800 mb-1">Real-world</p>
-              <p className="text-xs text-blue-700">{currentCard.realWorldConnection}</p>
-            </div>
-            <div className="w-full bg-amber-50 border border-amber-200 rounded-lg p-2">
-              <p className="text-xs font-medium text-amber-800 mb-1">TOK / How do we know?</p>
-              <p className="text-xs text-amber-700">{currentCard.tokConnection}</p>
-            </div>
-            <div className="w-full bg-purple-50 border border-purple-200 rounded-lg p-2">
-              <p className="text-xs font-medium text-purple-800 mb-1">Across subjects</p>
-              <p className="text-xs text-purple-700">{currentCard.interdisciplinary}</p>
-            </div>
-            <div className="w-full bg-green-50 border border-green-200 rounded-lg p-2">
-              <p className="text-xs font-medium text-green-800 mb-1">Think deeper</p>
-              <p className="text-xs text-green-700 italic">{currentCard.inquiryQuestion}</p>
-            </div>
+            {currentCard.realWorldConnection && (
+              <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-2">
+                <p className="text-xs font-medium text-blue-800 mb-1">Real-world</p>
+                <p className="text-xs text-blue-700">{currentCard.realWorldConnection}</p>
+              </div>
+            )}
+            {currentCard.tokConnection && (
+              <div className="w-full bg-amber-50 border border-amber-200 rounded-lg p-2">
+                <p className="text-xs font-medium text-amber-800 mb-1">TOK / How do we know?</p>
+                <p className="text-xs text-amber-700">{currentCard.tokConnection}</p>
+              </div>
+            )}
+            {currentCard.interdisciplinary && (
+              <div className="w-full bg-purple-50 border border-purple-200 rounded-lg p-2">
+                <p className="text-xs font-medium text-purple-800 mb-1">Across subjects</p>
+                <p className="text-xs text-purple-700">{currentCard.interdisciplinary}</p>
+              </div>
+            )}
+            {currentCard.inquiryQuestion && (
+              <div className="w-full bg-green-50 border border-green-200 rounded-lg p-2">
+                <p className="text-xs font-medium text-green-800 mb-1">Think deeper</p>
+                <p className="text-xs text-green-700 italic">{currentCard.inquiryQuestion}</p>
+              </div>
+            )}
           </div>
         }
       />
@@ -387,11 +474,6 @@ function SubjectPicker({ current, onSelect }: { current: SubjectFilter; onSelect
           }`}
         >
           {s.label}
-          {s.key !== "all" && (
-            <span className="ml-1 opacity-75">
-              ({SAMPLE_CARDS.filter((c) => c.subject === s.key).length})
-            </span>
-          )}
         </button>
       ))}
     </div>

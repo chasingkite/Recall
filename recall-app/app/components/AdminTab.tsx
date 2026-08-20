@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
+import ImportDeck from "./ImportDeck";
 
 interface Profile {
   id: string;
@@ -66,13 +67,32 @@ export default function AdminTab() {
     }
   }
 
+  const [showImport, setShowImport] = useState(false);
+
   if (loading) {
     return <div className="flex justify-center py-12"><div className="animate-spin h-6 w-6 border-4 border-blue-500 border-t-transparent rounded-full" /></div>;
+  }
+
+  if (showImport) {
+    return (
+      <div className="w-full">
+        <button onClick={() => setShowImport(false)} className="text-xs text-blue-600 mb-4 hover:text-blue-800">&larr; Back to Admin</button>
+        <ImportDeck />
+      </div>
+    );
   }
 
   return (
     <div className="w-full">
       <h1 className="text-xl font-bold text-gray-900 mb-4">Admin Panel</h1>
+
+      {/* Import Deck Button */}
+      <button
+        onClick={() => setShowImport(true)}
+        className="w-full mb-6 py-3 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
+      >
+        + Import Deck (CSV / Anki)
+      </button>
 
       <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Manage Users</h2>
       <div className="space-y-3">
