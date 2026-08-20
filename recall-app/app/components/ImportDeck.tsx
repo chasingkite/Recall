@@ -254,9 +254,20 @@ export default function ImportDeck() {
         return;
       }
 
-      // Insert cards
+      // Dedup: fetch existing card fronts for this subject
+      const { data: existingCards } = await supabase
+        .from("cards")
+        .select("front, decks!inner(subject)")
+        .eq("decks.subject", subject);
+
+      const existingFronts = new Set(
+        (existingCards || []).map((c: { front: string }) => c.front.toLowerCase().trim())
+      );
+
+      // Filter out duplicates and errors
       const cardsToInsert = enrichedCards
         .filter((c) => !c.enrichError)
+        .filter((c) => !existingFronts.has(c.front.toLowerCase().trim()))
         .map((c) => ({
           deck_id: deck.id,
           front: c.front,
@@ -270,6 +281,14 @@ export default function ImportDeck() {
           audio_lang: subject === "spanish" ? "es-ES" : "en-US",
         }));
 
+      const skippedCount = enrichedCards.filter((c) => !c.enrichError).length - cardsToInsert.length;
+
+      if (cardsToInsert.length === 0) {
+        setSaving(false);
+        alert(`All ${skippedCount} cards already exist in this subject. Nothing to import.`);
+        return;
+      }
+
       const { error: cardsError } = await supabase.from("cards").insert(cardsToInsert);
 
       if (cardsError) {
@@ -280,6 +299,9 @@ export default function ImportDeck() {
 
       setSaving(false);
       setSaved(true);
+      if (skippedCount > 0) {
+        alert(`Saved ${cardsToInsert.length} cards. Skipped ${skippedCount} duplicates.`);
+      }
     }
 
     return (
