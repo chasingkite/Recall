@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 import ImportDeck from "./ImportDeck";
+import CardAuditor from "./CardAuditor";
 
 interface Profile {
   id: string;
@@ -68,6 +69,7 @@ export default function AdminTab() {
   }
 
   const [showImport, setShowImport] = useState(false);
+  const [showAuditor, setShowAuditor] = useState(false);
 
   if (loading) {
     return <div className="flex justify-center py-12"><div className="animate-spin h-6 w-6 border-4 border-blue-500 border-t-transparent rounded-full" /></div>;
@@ -82,6 +84,15 @@ export default function AdminTab() {
     );
   }
 
+  if (showAuditor) {
+    return (
+      <div className="w-full">
+        <button onClick={() => setShowAuditor(false)} className="text-xs text-blue-600 mb-4 hover:text-blue-800">&larr; Back to Admin</button>
+        <CardAuditor />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
       <h1 className="text-xl font-bold text-gray-900 mb-4">Admin Panel</h1>
@@ -89,9 +100,17 @@ export default function AdminTab() {
       {/* Import Deck Button */}
       <button
         onClick={() => setShowImport(true)}
-        className="w-full mb-6 py-3 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
+        className="w-full mb-3 py-3 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
       >
         + Import Deck (CSV / Anki)
+      </button>
+
+      {/* Card Auditor Button */}
+      <button
+        onClick={() => setShowAuditor(true)}
+        className="w-full mb-6 py-3 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 text-amber-700 text-sm font-medium hover:bg-amber-100 transition-colors"
+      >
+        Audit Cards (Preview / Edit / Delete)
       </button>
 
       <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Manage Users</h2>

@@ -156,10 +156,24 @@ export default function StudyTab() {
   const [gaveUp, setGaveUp] = useState(false);
   const [remainingDue, setRemainingDue] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [cardCounts, setCardCounts] = useState<Record<string, number>>({});
   const supabase = createClient();
 
   const loadCards = useCallback(async (subject: SubjectFilter) => {
     setLoading(true);
+
+    // Fetch card counts per subject
+    const { data: allCardsForCounts } = await supabase
+      .from("cards")
+      .select("decks(subject)");
+    if (allCardsForCounts) {
+      const counts: Record<string, number> = { all: allCardsForCounts.length };
+      for (const c of allCardsForCounts) {
+        const s = (c as unknown as { decks: { subject: string } | null }).decks?.subject;
+        if (s) counts[s] = (counts[s] || 0) + 1;
+      }
+      setCardCounts(counts);
+    }
 
     let query = supabase
       .from("cards")
@@ -324,7 +338,7 @@ export default function StudyTab() {
         <p className="text-sm text-gray-500 mb-6">
           {subjectFilter === "all" ? "No cards are due for review right now." : `No ${subjectFilter} cards due right now.`}
         </p>
-        <SubjectPicker current={subjectFilter} onSelect={startSession} />
+        <SubjectPicker current={subjectFilter} onSelect={startSession} cardCounts={cardCounts} />
       </div>
     );
   }
@@ -350,7 +364,7 @@ export default function StudyTab() {
 
   return (
     <div className="flex flex-col items-center w-full">
-      <SubjectPicker current={subjectFilter} onSelect={startSession} />
+      <SubjectPicker current={subjectFilter} onSelect={startSession} cardCounts={cardCounts} />
       <StudyTimer />
       <ProgressBar current={currentIndex} total={cards.length} correctCount={correctCount} />
 
@@ -369,14 +383,14 @@ export default function StudyTab() {
               <img src={currentCard.imageUrl} alt="" className="w-full max-w-[180px] h-auto rounded-lg" />
             )}
             <div className="flex items-center gap-2">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-900 text-center">{currentCard.front}</h2>
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center">{currentCard.front}</h2>
               <AudioButton text={currentCard.front} lang={currentCard.audioLang} />
             </div>
             {currentCard.answerType === "fill-blank" && currentCard.blankSentence && (
-              <p className="text-sm text-gray-500 italic text-center">{currentCard.blankSentence}</p>
+              <p className="text-base text-gray-500 italic text-center">{currentCard.blankSentence}</p>
             )}
             {currentCard.answerType === "true-false" && currentCard.trueFalseStatement && (
-              <p className="text-sm text-gray-600 text-center border border-gray-200 rounded-lg p-2 bg-gray-50">
+              <p className="text-base text-gray-600 text-center border border-gray-200 rounded-lg p-3 bg-gray-50">
                 &ldquo;{currentCard.trueFalseStatement}&rdquo;
               </p>
             )}
@@ -387,7 +401,7 @@ export default function StudyTab() {
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isCorrect ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
               {isCorrect ? (isClose ? "Close enough!" : "Correct!") : "Incorrect"}
             </span>
-            <p className="text-lg font-bold text-gray-900 text-center">{currentCard.back}</p>
+            <p className="text-xl font-bold text-gray-900 text-center">{currentCard.back}</p>
             {currentCard.imageUrl && (
               <img src={currentCard.imageUrl} alt="" className="w-full max-w-[140px] h-auto rounded-lg" />
             )}
@@ -547,7 +561,7 @@ const SUBJECT_OPTIONS: { key: SubjectFilter; label: string; color: string }[] = 
   { key: "math", label: "Math", color: "bg-blue-500 text-white border-blue-500" },
 ];
 
-function SubjectPicker({ current, onSelect }: { current: SubjectFilter; onSelect: (s: SubjectFilter) => void }) {
+function SubjectPicker({ current, onSelect, cardCounts }: { current: SubjectFilter; onSelect: (s: SubjectFilter) => void; cardCounts?: Record<string, number> }) {
   return (
     <div className="flex gap-2 overflow-x-auto pb-3 mb-3 w-full scrollbar-hide">
       {SUBJECT_OPTIONS.map((s) => (
@@ -559,6 +573,9 @@ function SubjectPicker({ current, onSelect }: { current: SubjectFilter; onSelect
           }`}
         >
           {s.label}
+          {cardCounts && cardCounts[s.key] !== undefined && (
+            <span className="ml-1 opacity-75">({cardCounts[s.key]})</span>
+          )}
         </button>
       ))}
     </div>
