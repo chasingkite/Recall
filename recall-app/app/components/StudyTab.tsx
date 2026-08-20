@@ -105,30 +105,33 @@ function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCa
     }
 
     if (roll === 3) {
-      // True/false: sometimes correct, sometimes wrong
-      const isTrue = Math.random() > 0.5;
-      if (isTrue) {
-        return {
-          ...card,
-          answerType: "true-false" as const,
-          trueFalseStatement: `"${card.front}" means "${card.back}"`,
-          trueFalseAnswer: true,
-          back: "true",
-        };
-      } else {
-        const wrongAnswer = allCards
-          .filter((c) => c.id !== card.id && c.subject === card.subject)
-          .sort(() => Math.random() - 0.5)[0];
-        if (wrongAnswer) {
+      // True/false: only for language cards where "X means Y" makes sense
+      if (card.subject === "spanish") {
+        const isTrue = Math.random() > 0.5;
+        if (isTrue) {
           return {
             ...card,
             answerType: "true-false" as const,
-            trueFalseStatement: `"${card.front}" means "${wrongAnswer.back}"`,
-            trueFalseAnswer: false,
-            back: "false",
+            trueFalseStatement: `"${card.front}" means "${card.back}"`,
+            trueFalseAnswer: true,
+            back: "true",
           };
+        } else {
+          const wrongAnswer = allCards
+            .filter((c) => c.id !== card.id && c.subject === card.subject)
+            .sort(() => Math.random() - 0.5)[0];
+          if (wrongAnswer) {
+            return {
+              ...card,
+              answerType: "true-false" as const,
+              trueFalseStatement: `"${card.front}" means "${wrongAnswer.back}"`,
+              trueFalseAnswer: false,
+              back: "false",
+            };
+          }
         }
       }
+      // Non-Spanish: standard type-in
       return card;
     }
 
