@@ -61,10 +61,12 @@ function dbCardToStudyCard(c: DBCard): StudyCard {
 
 function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCard[] {
   return cards.map((card, i) => {
-    // Cards that already have a non-default answer type keep it
-    if (card.answerType !== "type" && card.choices) return card;
+    // Cards that already have a non-default answer type WITH choices keep them
+    if (card.answerType === "multiple-choice" && card.choices && card.choices.length > 0) return card;
+    if (card.answerType === "true-false" && card.trueFalseStatement) return card;
+    if (card.answerType === "fill-blank" && card.blankSentence) return card;
 
-    // Assign variety based on position in session
+    // For cards marked as MC but missing choices, or all "type" cards — assign variety
     const roll = i % 5;
 
     if (roll === 0) {

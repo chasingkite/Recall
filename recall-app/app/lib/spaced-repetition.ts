@@ -127,14 +127,42 @@ export function normalizeAnswer(text: string): string {
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
+    .replace(/[̀-ͯ]/g, "")
+    // Normalize superscript digits to regular digits
+    .replace(/⁰/g, "0").replace(/¹/g, "1").replace(/²/g, "2").replace(/³/g, "3")
+    .replace(/⁴/g, "4").replace(/⁵/g, "5").replace(/⁶/g, "6").replace(/⁷/g, "7")
+    .replace(/⁸/g, "8").replace(/⁹/g, "9")
+    // Normalize common math symbols
+    .replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-")
+    // Remove ^ for exponents (so x^3 and x3 match x³)
+    .replace(/\^/g, "")
+    // Remove extra spaces
+    .replace(/\s+/g, " ");
 }
 
 export function checkAnswer(userAnswer: string, correctAnswer: string): { correct: boolean; close: boolean } {
   const a = normalizeAnswer(userAnswer);
-  const b = normalizeAnswer(correctAnswer);
+  // Extract core answer: strip parenthetical explanations and anything after common separators
+  let cleaned = correctAnswer;
+  // Remove parenthetical explanations: "x⁸ (add exponents)" → "x⁸"
+  cleaned = cleaned.replace(/\s*\(.*\)\s*$/, "").trim();
+  // Remove explanations after common separators: "x⁸ — add exponents" or "x⁸ - add exponents"
+  cleaned = cleaned.replace(/\s*[—–]\s*.*$/, "").trim();
+  // For MC answers like "C) congruent (alternate interior angles)" extract just the answer
+  const mcMatch = cleaned.match(/^[A-D]\)\s*(.+)/);
+  if (mcMatch) cleaned = mcMatch[1].trim();
+
+  const b = normalizeAnswer(cleaned);
+  const bFull = normalizeAnswer(correctAnswer);
+
+  // Check against cleaned version first
   if (a === b) return { correct: true, close: false };
   if (levenshtein(a, b) <= 1) return { correct: true, close: true };
+  // Also check against full version in case student typed everything
+  if (a === bFull) return { correct: true, close: false };
+  if (levenshtein(a, bFull) <= 1) return { correct: true, close: true };
+  // Check if answer is contained in the correct answer (e.g., "x⁸" within "x⁸ (add exponents: 5+3=8)")
+  if (b.length > 2 && a.length >= b.length * 0.8 && bFull.includes(a)) return { correct: true, close: true };
   return { correct: false, close: false };
 }
 
