@@ -68,13 +68,17 @@ function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCa
     const roll = i % 5;
 
     if (roll === 0) {
-      // Reverse card: show the answer, ask for the term
-      return {
-        ...card,
-        answerType: "type" as const,
-        front: `What is the Spanish word for: "${card.back}"?`,
-        back: card.front,
-      };
+      // Reverse card: only for Spanish (show English, ask for Spanish word)
+      if (card.subject === "spanish") {
+        return {
+          ...card,
+          answerType: "type" as const,
+          front: `What is the Spanish word for: "${card.back}"?`,
+          back: card.front,
+        };
+      }
+      // Non-Spanish: just use standard type-in
+      return card;
     }
 
     if (roll === 1) {
