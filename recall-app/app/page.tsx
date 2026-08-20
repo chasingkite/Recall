@@ -7,6 +7,7 @@ import StudyTab from "./components/StudyTab";
 import ProgressTab from "./components/ProgressTab";
 import RewardsTab from "./components/RewardsTab";
 import AdminTab from "./components/AdminTab";
+import AdminDashboard from "./components/AdminDashboard";
 
 type Tab = "dashboard" | "study" | "progress" | "rewards" | "admin";
 
@@ -62,7 +63,7 @@ export default function Home() {
   const hasDashboard = !!profile?.canvas_student_id;
 
   const tabs: Tab[] = [];
-  if (hasDashboard) tabs.push("dashboard");
+  tabs.push("dashboard");
   tabs.push("study", "progress", "rewards");
   if (isAdmin) tabs.push("admin");
 
@@ -74,7 +75,9 @@ export default function Home() {
       </header>
 
       <div className="flex-1 max-w-md sm:max-w-2xl lg:max-w-4xl mx-auto w-full px-4 sm:px-6 py-6">
-        {tab === "dashboard" && hasDashboard && <DashboardTab />}
+        {tab === "dashboard" && isAdmin && <AdminDashboard />}
+        {tab === "dashboard" && !isAdmin && hasDashboard && <DashboardTab />}
+        {tab === "dashboard" && !isAdmin && !hasDashboard && <StudyTab />}
         {tab === "study" && <StudyTab />}
         {tab === "progress" && <ProgressTab />}
         {tab === "rewards" && <RewardsTab />}
