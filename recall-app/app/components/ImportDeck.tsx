@@ -93,7 +93,7 @@ export default function ImportDeck() {
     setStep("enriching");
     setProgress(0);
 
-    const batchSize = 5;
+    const batchSize = 3;
     const results: ImportedCard[] = [];
 
     for (let i = 0; i < rawCards.length; i += batchSize) {
@@ -104,9 +104,16 @@ export default function ImportDeck() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cards: batch }),
         });
-        const data = await res.json();
-        results.push(...data.cards);
-      } catch {
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error(`Enrich batch failed: ${res.status} ${errText}`);
+          results.push(...batch.map((c) => ({ ...c, enrichError: true })));
+        } else {
+          const data = await res.json();
+          results.push(...data.cards);
+        }
+      } catch (err) {
+        console.error("Enrich fetch error:", err);
         results.push(...batch.map((c) => ({ ...c, enrichError: true })));
       }
       setProgress(Math.min(100, Math.round(((i + batchSize) / rawCards.length) * 100)));

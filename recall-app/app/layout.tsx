@@ -11,10 +11,16 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "Recall",
-  description: "Recall App",
+  description: "Study smarter with spaced repetition",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
+    title: "Recall",
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-192.png",
   },
 };
 
