@@ -384,7 +384,7 @@ export default function StudyTab() {
             )}
             <div className="flex items-center gap-2">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center">{currentCard.front}</h2>
-              <AudioButton text={currentCard.front} lang={currentCard.audioLang} />
+              {currentCard.subject === "spanish" && <AudioButton text={currentCard.front} lang={currentCard.audioLang} />}
             </div>
             {currentCard.answerType === "fill-blank" && currentCard.blankSentence && (
               <p className="text-base text-gray-500 italic text-center">{currentCard.blankSentence}</p>

@@ -311,6 +311,24 @@ export default function ImportDeck() {
       }
     }
 
+    async function runCorrectnessCheck() {
+      const cardsToCheck = enrichedCards
+        .filter((c) => !c.enrichError)
+        .map((c) => ({ id: c.front, front: c.front, back: c.back, subject }));
+
+      const res = await fetch("/api/audit-correctness", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cards: cardsToCheck }),
+      });
+      const data = await res.json();
+      if (data.incorrect > 0) {
+        alert(`AI found ${data.incorrect} potentially incorrect cards. Check the Audit tab for details.`);
+      } else {
+        alert("All cards passed AI correctness check!");
+      }
+    }
+
     return (
       <div className="w-full">
         <div className="text-center py-6">
@@ -358,12 +376,20 @@ export default function ImportDeck() {
               </button>
             </>
           ) : (
-            <button
-              onClick={() => { setStep("upload"); setRawCards([]); setEnrichedCards([]); }}
-              className="flex-1 py-3 rounded-lg bg-blue-600 text-white text-sm font-medium"
-            >
-              Import Another Deck
-            </button>
+            <div className="flex flex-col gap-2 w-full">
+              <button
+                onClick={() => { setStep("upload"); setRawCards([]); setEnrichedCards([]); }}
+                className="w-full py-3 rounded-lg bg-blue-600 text-white text-sm font-medium"
+              >
+                Import Another Deck
+              </button>
+              <button
+                onClick={runCorrectnessCheck}
+                className="w-full py-2 rounded-lg border border-purple-300 bg-purple-50 text-purple-700 text-sm font-medium hover:bg-purple-100"
+              >
+                Verify Correctness with AI (external/Anki decks)
+              </button>
+            </div>
           )}
         </div>
       </div>
