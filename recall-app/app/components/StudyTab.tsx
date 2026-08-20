@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { createClient } from "../lib/supabase/client";
 import { SAMPLE_CARDS, StudyCard, MAX_SESSION_SIZE } from "../lib/sample-cards";
-import { checkAnswer, sm2Review, qualityFromResult } from "../lib/spaced-repetition";
+import { checkAnswer, fsrsReview, actionToRating } from "../lib/spaced-repetition";
 import { recordReview, recordSessionComplete } from "../lib/study-stats";
 import FlashCard from "./study/FlashCard";
 import AudioButton from "./study/AudioButton";
@@ -59,6 +59,80 @@ function dbCardToStudyCard(c: DBCard): StudyCard {
   };
 }
 
+function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCard[] {
+  return cards.map((card, i) => {
+    // Cards that already have a non-default answer type keep it
+    if (card.answerType !== "type" && card.choices) return card;
+
+    // Assign variety based on position in session
+    const roll = i % 5;
+
+    if (roll === 0) {
+      // Reverse card: show the answer, ask for the term
+      return {
+        ...card,
+        answerType: "type" as const,
+        front: `What is the Spanish word for: "${card.back}"?`,
+        back: card.front,
+      };
+    }
+
+    if (roll === 1) {
+      // Multiple choice: use other cards as distractors
+      const distractors = allCards
+        .filter((c) => c.id !== card.id && c.subject === card.subject)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3)
+        .map((c) => c.back);
+      if (distractors.length >= 3) {
+        const choices = [...distractors, card.back].sort(() => Math.random() - 0.5);
+        return { ...card, answerType: "multiple-choice" as const, choices };
+      }
+      return card;
+    }
+
+    if (roll === 2 && card.back.length > 2) {
+      // Fill in the blank: show first letter + blanks
+      return {
+        ...card,
+        answerType: "fill-blank" as const,
+        blankSentence: `The answer starts with "${card.back[0]}" and has ${card.back.length} letters.`,
+      };
+    }
+
+    if (roll === 3) {
+      // True/false: sometimes correct, sometimes wrong
+      const isTrue = Math.random() > 0.5;
+      if (isTrue) {
+        return {
+          ...card,
+          answerType: "true-false" as const,
+          trueFalseStatement: `"${card.front}" means "${card.back}"`,
+          trueFalseAnswer: true,
+          back: "true",
+        };
+      } else {
+        const wrongAnswer = allCards
+          .filter((c) => c.id !== card.id && c.subject === card.subject)
+          .sort(() => Math.random() - 0.5)[0];
+        if (wrongAnswer) {
+          return {
+            ...card,
+            answerType: "true-false" as const,
+            trueFalseStatement: `"${card.front}" means "${wrongAnswer.back}"`,
+            trueFalseAnswer: false,
+            back: "false",
+          };
+        }
+      }
+      return card;
+    }
+
+    // roll === 4: standard type-in (hardest, pure active recall)
+    return card;
+  });
+}
+
 export default function StudyTab() {
   const [subjectFilter, setSubjectFilter] = useState<SubjectFilter>("all");
   const [cards, setCards] = useState<StudyCard[]>([]);
@@ -105,8 +179,10 @@ export default function StudyTab() {
     }
 
     const shuffled = studyCards.sort(() => Math.random() - 0.5);
+    const sessionCards = shuffled.slice(0, MAX_SESSION_SIZE);
+    const varied = assignAnswerVariety(sessionCards, studyCards);
     setRemainingDue(Math.max(0, shuffled.length - MAX_SESSION_SIZE));
-    setCards(shuffled.slice(0, MAX_SESSION_SIZE));
+    setCards(varied);
     setCurrentIndex(0);
     setState("active");
     setUserAnswer("");
@@ -189,16 +265,16 @@ export default function StudyTab() {
   const handleRate = useCallback(
     (correct: boolean) => {
       if (!currentCard) return;
-      const quality = qualityFromResult(correct, hintUsed, gaveUp);
-      const newState = sm2Review(
-        { easiness: currentCard.easiness, interval: currentCard.interval, repetitions: currentCard.repetitions, nextReviewAt: currentCard.nextReviewAt },
-        quality
+      const rating = actionToRating(correct, hintUsed, gaveUp);
+      const newState = fsrsReview(
+        { stability: currentCard.easiness, difficulty: 5.0, lastReviewAt: new Date(), nextReviewAt: currentCard.nextReviewAt, reps: currentCard.repetitions },
+        rating
       );
-      recordReview(currentCard.subject, correct, quality >= 3 ? 1 : 0);
+      recordReview(currentCard.subject, correct, rating >= 3 ? 1 : 0);
       setCards((prev) =>
         prev.map((c) =>
           c.id === currentCard.id
-            ? { ...c, easiness: newState.easiness, interval: newState.interval, repetitions: newState.repetitions, nextReviewAt: newState.nextReviewAt }
+            ? { ...c, easiness: newState.stability, interval: Math.round(newState.stability), repetitions: newState.reps, nextReviewAt: newState.nextReviewAt }
             : c
         )
       );
