@@ -26,14 +26,23 @@ type Filter = "all" | "overdue" | "today" | "week" | "upcoming";
 
 function getTimeBucket(dueAt: string | null, status: string): string {
   if (!dueAt) return "no-date";
+  // Already submitted/graded — not actionable
+  if (status === "graded" || status === "submitted") return "upcoming";
+
   const now = new Date();
   const due = new Date(dueAt);
+
+  // Use end of due date (give full day to submit)
+  const endOfDueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate() + 1);
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const endOfToday = new Date(startOfToday.getTime() + 86400000);
   const endOfWeek = new Date(startOfToday.getTime() + 7 * 86400000);
 
-  if (due < startOfToday && status === "unsubmitted") return "overdue";
+  // Overdue: due date has fully passed AND not submitted
+  if (endOfDueDay <= startOfToday && status === "unsubmitted") return "overdue";
+  // Due today: due date is today
   if (due >= startOfToday && due < endOfToday) return "today";
+  // This week
   if (due >= endOfToday && due < endOfWeek) return "week";
   return "upcoming";
 }
