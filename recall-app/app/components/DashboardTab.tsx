@@ -83,10 +83,10 @@ export default function DashboardTab() {
   const [courseFilter, setCourseFilter] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/canvas")
+    fetch("/api/canvas-sync?studentId=81991")
       .then((r) => r.json())
-      .then((data) => {
-        setCourses(data);
+      .then((res) => {
+        setCourses(res.data || []);
         setLoading(false);
       })
       .catch(() => setLoading(false));

@@ -167,10 +167,10 @@ function CanvasSummary({ studentId }: { studentId: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/canvas")
+    fetch(`/api/canvas-sync?studentId=${studentId}`)
       .then((r) => r.json())
-      .then((data) => {
-        setCourses(data);
+      .then((res) => {
+        setCourses(res.data || []);
         setLoading(false);
       })
       .catch(() => setLoading(false));

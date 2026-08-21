@@ -60,31 +60,17 @@ function dbCardToStudyCard(c: DBCard): StudyCard {
 }
 
 function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCard[] {
-  return cards.map((card, i) => {
+  return cards.map((card) => {
     // Cards that already have a non-default answer type WITH choices keep them
     if (card.answerType === "multiple-choice" && card.choices && card.choices.length > 0) return card;
     if (card.answerType === "true-false" && card.trueFalseStatement) return card;
     if (card.answerType === "fill-blank" && card.blankSentence) return card;
 
-    // For cards marked as MC but missing choices, or all "type" cards — assign variety
-    const roll = i % 5;
+    // Random assignment weighted toward variety
+    const rand = Math.random();
 
-    if (roll === 0) {
-      // Reverse card: only for Spanish (show English, ask for Spanish word)
-      if (card.subject === "spanish") {
-        return {
-          ...card,
-          answerType: "type" as const,
-          front: `What is the Spanish word for: "${card.back}"?`,
-          back: card.front,
-        };
-      }
-      // Non-Spanish: just use standard type-in
-      return card;
-    }
-
-    if (roll === 1) {
-      // Multiple choice: use other cards as distractors (ALL subjects)
+    if (rand < 0.30) {
+      // 30% Multiple choice (ALL subjects)
       const distractors = allCards
         .filter((c) => c.id !== card.id && c.subject === card.subject)
         .sort(() => Math.random() - 0.5)
@@ -94,32 +80,16 @@ function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCa
         const choices = [...distractors, card.back].sort(() => Math.random() - 0.5);
         return { ...card, answerType: "multiple-choice" as const, choices };
       }
-      return card;
     }
 
-    if (roll === 2 && card.back.length > 2) {
-      // Fill in the blank: show first letter + blanks
-      return {
-        ...card,
-        answerType: "fill-blank" as const,
-        blankSentence: `The answer starts with "${card.back[0]}" and has ${card.back.length} letters.`,
-      };
-    }
-
-    if (roll === 3) {
-      // True/false: works for all subjects with different phrasing
+    if (rand >= 0.30 && rand < 0.50) {
+      // 20% True/false (ALL subjects)
       const isTrue = Math.random() > 0.5;
       if (isTrue) {
         const statement = card.subject === "spanish"
           ? `"${card.front}" means "${card.back}"`
           : `The answer to "${card.front.slice(0, 60)}" is "${card.back.slice(0, 60)}"`;
-        return {
-          ...card,
-          answerType: "true-false" as const,
-          trueFalseStatement: statement,
-          trueFalseAnswer: true,
-          back: "true",
-        };
+        return { ...card, answerType: "true-false" as const, trueFalseStatement: statement, trueFalseAnswer: true, back: "true" };
       } else {
         const wrongAnswer = allCards
           .filter((c) => c.id !== card.id && c.subject === card.subject)
@@ -128,19 +98,22 @@ function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCa
           const statement = card.subject === "spanish"
             ? `"${card.front}" means "${wrongAnswer.back}"`
             : `The answer to "${card.front.slice(0, 60)}" is "${wrongAnswer.back.slice(0, 60)}"`;
-          return {
-            ...card,
-            answerType: "true-false" as const,
-            trueFalseStatement: statement,
-            trueFalseAnswer: false,
-            back: "false",
-          };
+          return { ...card, answerType: "true-false" as const, trueFalseStatement: statement, trueFalseAnswer: false, back: "false" };
         }
       }
-      return card;
     }
 
-    // roll === 4: standard type-in (hardest, pure active recall)
+    if (rand >= 0.50 && rand < 0.65 && card.back.length > 2) {
+      // 15% Fill-blank
+      return { ...card, answerType: "fill-blank" as const, blankSentence: `The answer starts with "${card.back[0]}" and has ${card.back.length} letters.` };
+    }
+
+    if (rand >= 0.65 && rand < 0.75 && card.subject === "spanish") {
+      // 10% Reverse (Spanish only)
+      return { ...card, answerType: "type" as const, front: `What is the Spanish word for: "${card.back}"?`, back: card.front };
+    }
+
+    // 25-35% Type-in (pure active recall)
     return card;
   });
 }
