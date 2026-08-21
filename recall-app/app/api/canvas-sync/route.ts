@@ -41,6 +41,13 @@ export async function POST(request: Request) {
 
       const assignments = (submissions || [])
         .filter((s: any) => s.assignment?.name)
+        .filter((s: any) => {
+          // Exclude stale assignments from previous school years
+          if (!s.assignment.due_at) return true;
+          const dueYear = new Date(s.assignment.due_at).getFullYear();
+          const currentYear = new Date().getFullYear();
+          return dueYear >= currentYear - 1;
+        })
         .map((s: any) => ({
           name: s.assignment.name,
           dueAt: s.assignment.due_at,
@@ -138,6 +145,13 @@ export async function GET(request: Request) {
 
       const assignments = (submissions || [])
         .filter((s: any) => s.assignment?.name)
+        .filter((s: any) => {
+          // Exclude stale assignments from previous school years
+          if (!s.assignment.due_at) return true;
+          const dueYear = new Date(s.assignment.due_at).getFullYear();
+          const currentYear = new Date().getFullYear();
+          return dueYear >= currentYear - 1;
+        })
         .map((s: any) => ({
           name: s.assignment.name,
           dueAt: s.assignment.due_at,

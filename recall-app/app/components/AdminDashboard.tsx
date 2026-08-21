@@ -185,10 +185,16 @@ function CanvasSummary({ studentId }: { studentId: string }) {
   const completedAssignments = allAssignments.filter((a) => a.status === "graded" || a.status === "submitted").length;
 
   const now = new Date();
-  const weekFromNow = new Date(now.getTime() + 7 * 86400000);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekFromNow = new Date(startOfToday.getTime() + 7 * 86400000);
 
-  const overdue = allAssignments.filter((a) => a.status === "unsubmitted" && a.dueAt && new Date(a.dueAt) < now);
-  const dueSoon = allAssignments.filter((a) => a.dueAt && new Date(a.dueAt) >= now && new Date(a.dueAt) <= weekFromNow).sort((a, b) => new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime());
+  function getDueDate(dueAt: string): Date {
+    const [year, month, day] = dueAt.split("T")[0].split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  const overdue = allAssignments.filter((a) => a.status === "unsubmitted" && a.dueAt && getDueDate(a.dueAt) < startOfToday);
+  const dueSoon = allAssignments.filter((a) => a.dueAt && getDueDate(a.dueAt) >= startOfToday && getDueDate(a.dueAt) <= weekFromNow).sort((a, b) => getDueDate(a.dueAt!).getTime() - getDueDate(b.dueAt!).getTime());
   const recentlySubmitted = allAssignments.filter((a) => a.status === "graded" || a.status === "submitted").slice(-5).reverse();
 
   return (
