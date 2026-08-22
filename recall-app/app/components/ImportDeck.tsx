@@ -280,6 +280,7 @@ export default function ImportDeck() {
           front: c.front,
           back: c.back,
           answer_type: c.answerType || "type",
+          topic: deckName || null,
           explanation: c.explanation || null,
           real_world_connection: c.realWorldConnection || null,
           tok_connection: c.tokConnection || null,

@@ -18,6 +18,7 @@ export interface StudyCard {
   imageUrl?: string;
   audioLang: string;
   subject: "spanish" | "biology" | "english" | "math";
+  topic?: string;
   // SM-2 state
   easiness: number;
   interval: number;

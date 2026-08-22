@@ -16,6 +16,7 @@ interface Card {
   inquiry_question: string | null;
   image_url: string | null;
   audio_lang: string | null;
+  topic: string | null;
   decks: { subject: string; name: string } | null;
 }
 
@@ -76,13 +77,13 @@ export default function CardAuditor() {
     setLoading(true);
     let query = supabase
       .from("cards")
-      .select("id, front, back, answer_type, explanation, real_world_connection, tok_connection, interdisciplinary, inquiry_question, image_url, audio_lang, decks(subject, name)")
+      .select("id, front, back, answer_type, explanation, real_world_connection, tok_connection, interdisciplinary, inquiry_question, image_url, audio_lang, topic, decks(subject, name)")
       .order("created_at", { ascending: false });
 
     if (subjectFilter !== "all") {
       query = supabase
         .from("cards")
-        .select("id, front, back, answer_type, explanation, real_world_connection, tok_connection, interdisciplinary, inquiry_question, image_url, audio_lang, decks!inner(subject, name)")
+        .select("id, front, back, answer_type, explanation, real_world_connection, tok_connection, interdisciplinary, inquiry_question, image_url, audio_lang, topic, decks!inner(subject, name)")
         .eq("decks.subject", subjectFilter)
         .order("created_at", { ascending: false });
     }
@@ -102,6 +103,19 @@ export default function CardAuditor() {
   });
 
   const currentCard = filtered[currentIndex];
+
+  // Generate MC choices for preview — prefer same topic for plausible distractors
+  function getPreviewChoices(card: Card): string[] | null {
+    // First try same topic
+    let pool = cards.filter((c) => c.id !== card.id && c.topic === card.topic && c.back !== card.back);
+    // Fall back to same subject if not enough
+    if (pool.length < 3) {
+      pool = cards.filter((c) => c.id !== card.id && c.decks?.subject === card.decks?.subject && c.back !== card.back);
+    }
+    if (pool.length < 3) return null;
+    const distractors = pool.sort(() => Math.random() - 0.5).slice(0, 3).map((c) => c.back);
+    return [...distractors, card.back].sort(() => Math.random() - 0.5);
+  }
 
   function goNext() {
     if (currentIndex < filtered.length - 1) {
@@ -273,6 +287,18 @@ export default function CardAuditor() {
               {currentCard.audio_lang && currentCard.decks?.subject === "spanish" && (
                 <AudioButton text={currentCard.front} lang={currentCard.audio_lang} />
               )}
+              {/* Preview answer choices as student would see them */}
+              <div className="w-full mt-3 border-t border-gray-100 pt-3">
+                <p className="text-xs text-gray-400 mb-2 text-center">Student sees one of these formats:</p>
+                <div className="space-y-1.5">
+                  {getPreviewChoices(currentCard)?.map((choice, i) => (
+                    <div key={i} className={`py-2 px-3 rounded-lg border text-sm ${choice === currentCard.back ? "border-green-300 bg-green-50 text-green-800 font-medium" : "border-gray-200 bg-white text-gray-700"}`}>
+                      {choice}
+                      {choice === currentCard.back && <span className="text-xs ml-2 text-green-600">✓ correct</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
               <p className="text-xs text-gray-400 mt-2">Tap to flip</p>
             </div>
           ) : (

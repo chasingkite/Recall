@@ -143,8 +143,21 @@ export default function DashboardTab() {
 
   return (
     <>
+      {/* Class Grades Summary */}
       <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Hailey&apos;s Dashboard</h1>
+        <h1 className="text-xl font-bold text-gray-900 mb-3">Hailey&apos;s Dashboard</h1>
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          {courses.map((c) => (
+            <div key={c.id} className="shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-2 min-w-[100px] text-center">
+              <p className="text-xs text-gray-500 truncate">{c.name.split("-")[0].replace(/^\d+\s*/, "").trim()}</p>
+              <p className="text-lg font-bold text-gray-900">{c.grade || "--"}</p>
+              {c.score !== null && <p className="text-xs text-gray-400">{c.score}%</p>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-3">
         <p className="text-sm text-gray-500">
           {overdueCount > 0 && <span className="text-red-600 font-medium">{overdueCount} overdue</span>}
           {overdueCount > 0 && weekCount > 0 && " · "}

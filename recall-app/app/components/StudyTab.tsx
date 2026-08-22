@@ -34,6 +34,7 @@ interface DBCard {
   example_sentence: string | null;
   image_url: string | null;
   audio_lang: string;
+  topic: string | null;
   decks: { subject: string } | null;
 }
 
@@ -52,6 +53,7 @@ function dbCardToStudyCard(c: DBCard): StudyCard {
     imageUrl: c.image_url || undefined,
     audioLang: c.audio_lang || "en-US",
     subject: (c.decks?.subject || "english") as StudyCard["subject"],
+    topic: c.topic || undefined,
     easiness: 2.5,
     interval: 0,
     repetitions: 0,
@@ -70,12 +72,27 @@ function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCa
     const rand = Math.random();
 
     if (rand < 0.30) {
-      // 30% Multiple choice (ALL subjects)
-      const distractors = allCards
-        .filter((c) => c.id !== card.id && c.subject === card.subject)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3)
-        .map((c) => c.back);
+      // 30% Multiple choice — prefer distractors from SAME TOPIC first
+      let distractors: string[] = [];
+
+      // First try same topic (most plausible wrong answers)
+      if (card.topic) {
+        distractors = allCards
+          .filter((c) => c.id !== card.id && c.topic === card.topic && c.back !== card.back)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 3)
+          .map((c) => c.back);
+      }
+
+      // Fall back to same subject if not enough same-topic cards
+      if (distractors.length < 3) {
+        distractors = allCards
+          .filter((c) => c.id !== card.id && c.subject === card.subject && c.back !== card.back)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 3)
+          .map((c) => c.back);
+      }
+
       if (distractors.length >= 3) {
         const choices = [...distractors, card.back].sort(() => Math.random() - 0.5);
         return { ...card, answerType: "multiple-choice" as const, choices };

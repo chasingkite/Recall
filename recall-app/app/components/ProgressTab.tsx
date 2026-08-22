@@ -3,14 +3,6 @@
 import { useEffect, useState } from "react";
 import { loadStats, StudyStats } from "../lib/study-stats";
 
-interface Course {
-  id: number;
-  name: string;
-  grade: string | null;
-  score: number | null;
-  assignments: { status: string }[];
-}
-
 const SUBJECT_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
   spanish: { bg: "bg-orange-50", text: "text-orange-700", bar: "bg-orange-500" },
   biology: { bg: "bg-green-50", text: "text-green-700", bar: "bg-green-500" },
@@ -21,19 +13,10 @@ const SUBJECT_COLORS: Record<string, { bg: string; text: string; bar: string }> 
 const SUBJECTS = ["spanish", "biology", "english", "math"];
 
 export default function ProgressTab() {
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<StudyStats | null>(null);
 
   useEffect(() => {
     setStats(loadStats());
-    fetch("/api/canvas")
-      .then((r) => r.json())
-      .then((data) => {
-        setCourses(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
   }, []);
 
   const totalReviewed = stats?.totalCardsReviewed ?? 0;
@@ -95,41 +78,6 @@ export default function ProgressTab() {
           );
         })}
       </div>
-
-      {/* Class Grades */}
-      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Class Grades</h2>
-      {loading ? (
-        <div className="flex justify-center py-6">
-          <div className="animate-spin h-6 w-6 border-4 border-blue-500 border-t-transparent rounded-full" />
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {courses.map((c) => {
-            const submitted = c.assignments.filter((a) => a.status === "graded" || a.status === "submitted").length;
-            const total = c.assignments.length;
-            return (
-              <div key={c.id} className="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {c.name.split("-")[0].replace(/^\d+\s*/, "").trim()}
-                  </p>
-                  <p className="text-xs text-gray-500">{submitted}/{total} assignments complete</p>
-                </div>
-                <div className="text-right">
-                  {c.grade ? (
-                    <span className="text-lg font-bold text-gray-900">{c.grade}</span>
-                  ) : (
-                    <span className="text-sm text-gray-400">--</span>
-                  )}
-                  {c.score !== null && (
-                    <p className="text-xs text-gray-500">{c.score}%</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {stats?.lastStudiedAt && (
         <p className="text-xs text-gray-400 text-center mt-6">
