@@ -33,20 +33,47 @@ export default function ImportDeck() {
     const lines = text.trim().split("\n");
     const cards: { front: string; back: string }[] = [];
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
+    // Skip header row if it looks like one
+    const firstLine = lines[0]?.toLowerCase().trim();
+    const startIdx = (firstLine === "front,back" || firstLine === "front,back,topic" || firstLine?.startsWith("front\tback")) ? 1 : 0;
+
+    for (let i = startIdx; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
 
       // Try tab-separated (Anki default export)
       if (line.includes("\t")) {
-        const [front, back] = line.split("\t");
-        if (front && back) cards.push({ front: front.trim(), back: back.trim() });
+        const parts = line.split("\t");
+        if (parts[0] && parts[1]) cards.push({ front: parts[0].trim(), back: parts[1].trim() });
         continue;
       }
 
-      // Try comma-separated (with possible quotes)
-      const match = line.match(/^"?([^"]*)"?\s*[,;]\s*"?([^"]*)"?$/);
-      if (match) {
-        cards.push({ front: match[1].trim(), back: match[2].trim() });
+      // Try CSV with proper parsing (handles commas inside quoted fields)
+      const csvMatch = line.match(/^"([^"]+)"\s*,\s*"?([^"]*(?:"[^"]*"[^"]*)*)"?\s*(?:,.*)?$/);
+      if (csvMatch) {
+        cards.push({ front: csvMatch[1].trim(), back: csvMatch[2].replace(/^"|"$/g, "").trim() });
+        continue;
+      }
+
+      // Simple comma-separated: take first two fields only, ignore third (topic)
+      const parts = line.split(",");
+      if (parts.length >= 2) {
+        const front = parts[0].trim();
+        // Back is everything between first and last comma (in case back has no commas)
+        // If 3+ parts, last part is likely topic — exclude it
+        let back: string;
+        if (parts.length > 2) {
+          // Check if last part looks like a topic (no spaces, short, lowercase)
+          const lastPart = parts[parts.length - 1].trim();
+          if (lastPart.length < 30 && !lastPart.includes(" ") && lastPart === lastPart.toLowerCase()) {
+            back = parts.slice(1, -1).join(",").trim();
+          } else {
+            back = parts.slice(1).join(",").trim();
+          }
+        } else {
+          back = parts[1].trim();
+        }
+        if (front && back) cards.push({ front, back });
         continue;
       }
 

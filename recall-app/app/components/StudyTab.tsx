@@ -1,25 +1,11 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { createClient } from "../lib/supabase/client";
-import { SAMPLE_CARDS, StudyCard, MAX_SESSION_SIZE } from "../lib/sample-cards";
+import { StudyCard, MAX_SESSION_SIZE } from "../lib/sample-cards";
 import { checkAnswer, fsrsReview, actionToRating } from "../lib/spaced-repetition";
 import { recordReview, recordSessionComplete } from "../lib/study-stats";
-import FlashCard from "./study/FlashCard";
-import AudioButton from "./study/AudioButton";
-import ProgressBar from "./study/ProgressBar";
-import SessionComplete from "./study/SessionComplete";
-import StudyTimer from "./study/StudyTimer";
-
-const SUBJECT_COLORS: Record<string, string> = {
-  spanish: "bg-orange-100 text-orange-700",
-  biology: "bg-green-100 text-green-700",
-  english: "bg-purple-100 text-purple-700",
-  math: "bg-blue-100 text-blue-700",
-};
-
-type SessionState = "active" | "revealed" | "complete";
-type SubjectFilter = "all" | "spanish" | "biology" | "english" | "math";
+import { earnSessionPoints } from "../lib/points";
 
 interface DBCard {
   id: string;
@@ -35,542 +21,430 @@ interface DBCard {
   image_url: string | null;
   audio_lang: string;
   topic: string | null;
+  choices: string[] | null;
   decks: { subject: string } | null;
 }
 
 function dbCardToStudyCard(c: DBCard): StudyCard {
   return {
-    id: c.id,
-    front: c.front,
-    back: c.back,
+    id: c.id, front: c.front, back: c.back,
     answerType: (c.answer_type || "type") as StudyCard["answerType"],
+    choices: c.choices || undefined,
     explanation: c.explanation || "",
     realWorldConnection: c.real_world_connection || "",
     tokConnection: c.tok_connection || "",
     interdisciplinary: c.interdisciplinary || "",
     inquiryQuestion: c.inquiry_question || "",
-    exampleSentence: c.example_sentence || undefined,
     imageUrl: c.image_url || undefined,
     audioLang: c.audio_lang || "en-US",
     subject: (c.decks?.subject || "english") as StudyCard["subject"],
     topic: c.topic || undefined,
-    easiness: 2.5,
-    interval: 0,
-    repetitions: 0,
-    nextReviewAt: new Date(),
+    easiness: 2.5, interval: 0, repetitions: 0, nextReviewAt: new Date(),
   };
 }
 
-function assignAnswerVariety(cards: StudyCard[], allCards: StudyCard[]): StudyCard[] {
+function assignVariety(cards: StudyCard[], all: StudyCard[]): StudyCard[] {
   return cards.map((card) => {
-    // Cards that already have a non-default answer type WITH choices keep them
     if (card.answerType === "multiple-choice" && card.choices && card.choices.length > 0) return card;
-    if (card.answerType === "true-false" && card.trueFalseStatement) return card;
-    if (card.answerType === "fill-blank" && card.blankSentence) return card;
-
-    // Random assignment weighted toward variety
     const rand = Math.random();
-
     if (rand < 0.30) {
-      // 30% Multiple choice — prefer distractors from SAME TOPIC first
-      let distractors: string[] = [];
-
-      // First try same topic (most plausible wrong answers)
-      if (card.topic) {
-        distractors = allCards
-          .filter((c) => c.id !== card.id && c.topic === card.topic && c.back !== card.back)
-          .sort(() => Math.random() - 0.5)
-          .slice(0, 3)
-          .map((c) => c.back);
-      }
-
-      // Fall back to same subject if not enough same-topic cards
-      if (distractors.length < 3) {
-        distractors = allCards
-          .filter((c) => c.id !== card.id && c.subject === card.subject && c.back !== card.back)
-          .sort(() => Math.random() - 0.5)
-          .slice(0, 3)
-          .map((c) => c.back);
-      }
-
-      if (distractors.length >= 3) {
-        const choices = [...distractors, card.back].sort(() => Math.random() - 0.5);
+      let pool = all.filter((c) => c.id !== card.id && c.topic === card.topic && c.back !== card.back);
+      if (pool.length < 3) pool = all.filter((c) => c.id !== card.id && c.subject === card.subject && c.back !== card.back);
+      if (pool.length >= 3) {
+        const choices = [...pool.sort(() => Math.random() - 0.5).slice(0, 3).map((c) => c.back), card.back].sort(() => Math.random() - 0.5);
         return { ...card, answerType: "multiple-choice" as const, choices };
       }
     }
-
     if (rand >= 0.30 && rand < 0.50) {
-      // 20% True/false (ALL subjects)
       const isTrue = Math.random() > 0.5;
       if (isTrue) {
-        const statement = card.subject === "spanish"
-          ? `"${card.front}" means "${card.back}"`
-          : `The answer to "${card.front.slice(0, 60)}" is "${card.back.slice(0, 60)}"`;
-        return { ...card, answerType: "true-false" as const, trueFalseStatement: statement, trueFalseAnswer: true, back: "true" };
-      } else {
-        const wrongAnswer = allCards
-          .filter((c) => c.id !== card.id && c.subject === card.subject)
-          .sort(() => Math.random() - 0.5)[0];
-        if (wrongAnswer) {
-          const statement = card.subject === "spanish"
-            ? `"${card.front}" means "${wrongAnswer.back}"`
-            : `The answer to "${card.front.slice(0, 60)}" is "${wrongAnswer.back.slice(0, 60)}"`;
-          return { ...card, answerType: "true-false" as const, trueFalseStatement: statement, trueFalseAnswer: false, back: "false" };
-        }
+        return { ...card, answerType: "true-false" as const, trueFalseStatement: `The answer to "${card.front.slice(0, 50)}" is "${card.back.slice(0, 50)}"`, trueFalseAnswer: true, back: "true" };
+      }
+      const wrong = all.filter((c) => c.id !== card.id && c.subject === card.subject).sort(() => Math.random() - 0.5)[0];
+      if (wrong) {
+        return { ...card, answerType: "true-false" as const, trueFalseStatement: `The answer to "${card.front.slice(0, 50)}" is "${wrong.back.slice(0, 50)}"`, trueFalseAnswer: false, back: "false" };
       }
     }
-
     if (rand >= 0.50 && rand < 0.65 && card.back.length > 2) {
-      // 15% Fill-blank
-      return { ...card, answerType: "fill-blank" as const, blankSentence: `The answer starts with "${card.back[0]}" and has ${card.back.length} letters.` };
+      return { ...card, answerType: "fill-blank" as const, blankSentence: `Starts with "${card.back[0]}" — ${card.back.length} letters` };
     }
-
     if (rand >= 0.65 && rand < 0.75 && card.subject === "spanish") {
-      // 10% Reverse (Spanish only)
       return { ...card, answerType: "type" as const, front: `What is the Spanish word for: "${card.back}"?`, back: card.front };
     }
-
-    // 25-35% Type-in (pure active recall)
     return card;
   });
 }
 
+const SUBJECT_COLORS: Record<string, string> = {
+  spanish: "text-orange-400",
+  biology: "text-green-400",
+  english: "text-purple-400",
+  math: "text-blue-400",
+};
+
+type Phase = "start" | "studying" | "celebration" | "done";
+
 export default function StudyTab() {
-  const [subjectFilter, setSubjectFilter] = useState<SubjectFilter>("all");
+  const [phase, setPhase] = useState<Phase>("start");
   const [cards, setCards] = useState<StudyCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [state, setState] = useState<SessionState>("active");
+  const [answered, setAnswered] = useState(false);
   const [userAnswer, setUserAnswer] = useState("");
   const [isCorrect, setIsCorrect] = useState(false);
   const [isClose, setIsClose] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
-  const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [hintUsed, setHintUsed] = useState(false);
-  const [gaveUp, setGaveUp] = useState(false);
-  const [remainingDue, setRemainingDue] = useState(0);
+  const [showHint, setShowHint] = useState(false);
+  const [totalCards, setTotalCards] = useState(0);
+  const [studyReason, setStudyReason] = useState("");
+  const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [cardCounts, setCardCounts] = useState<Record<string, number>>({});
+  const [enrichField, setEnrichField] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
-  const loadCards = useCallback(async (subject: SubjectFilter) => {
-    setLoading(true);
-
-    // Fetch card counts per subject
-    const { data: allCardsForCounts } = await supabase
-      .from("cards")
-      .select("decks(subject)");
-    if (allCardsForCounts) {
-      const counts: Record<string, number> = { all: allCardsForCounts.length };
-      for (const c of allCardsForCounts) {
-        const s = (c as unknown as { decks: { subject: string } | null }).decks?.subject;
-        if (s) counts[s] = (counts[s] || 0) + 1;
-      }
-      setCardCounts(counts);
-    }
-
-    let query = supabase
-      .from("cards")
-      .select("*, decks(subject)")
-      .order("created_at");
-
-    if (subject !== "all") {
-      query = supabase
-        .from("cards")
-        .select("*, decks!inner(subject)")
-        .eq("decks.subject", subject)
-        .order("created_at");
-    }
-
-    const { data } = await query;
-
-    let studyCards: StudyCard[];
-    if (data && data.length > 0) {
-      studyCards = (data as DBCard[]).map(dbCardToStudyCard);
-    } else {
-      // Fallback to hardcoded cards if Supabase is empty
-      studyCards = SAMPLE_CARDS.filter((c) => {
-        if (subject === "all") return true;
-        return c.subject === subject;
-      });
-    }
-
-    const shuffled = studyCards.sort(() => Math.random() - 0.5);
-    const sessionCards = shuffled.slice(0, MAX_SESSION_SIZE);
-    const varied = assignAnswerVariety(sessionCards, studyCards);
-    setRemainingDue(Math.max(0, shuffled.length - MAX_SESSION_SIZE));
-    setCards(varied);
-    setCurrentIndex(0);
-    setState("active");
-    setUserAnswer("");
-    setSelectedChoice(null);
-    setCorrectCount(0);
-    setHintUsed(false);
-    setGaveUp(false);
-    setLoading(false);
-  }, [supabase]);
-
+  // Load on mount
   useEffect(() => {
-    loadCards("all");
-  }, [loadCards]);
+    loadSession();
+  }, []);
 
-  const startSession = useCallback((subject: SubjectFilter) => {
-    setSubjectFilter(subject);
-    loadCards(subject);
-  }, [loadCards]);
+  async function loadSession() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/smart-session?studentId=81991&mode=quick5&subject=all");
+      const data = await res.json();
+      if (data.cards && data.cards.length > 0) {
+        const studyCards = (data.cards as DBCard[]).map(dbCardToStudyCard);
+        // Use allCards pool for MC distractor generation (much larger than session)
+        const allPool = data.allCards ? (data.allCards as DBCard[]).map(dbCardToStudyCard) : studyCards;
+        const varied = assignVariety(studyCards, allPool);
+        setCards(varied);
+        setTotalCards(data.totalDue || varied.length);
+        if (data.assignments?.length > 0 && data.matchedTopics?.length > 0) {
+          setStudyReason(data.assignments[0].name);
+        }
+      } else {
+        const { data: dbCards } = await supabase.from("cards").select("*, decks(subject)").limit(50);
+        if (dbCards && dbCards.length > 0) {
+          const all = (dbCards as unknown as DBCard[]).map(dbCardToStudyCard);
+          const session = all.sort(() => Math.random() - 0.5).slice(0, 5);
+          setCards(assignVariety(session, all));
+          setTotalCards(dbCards.length);
+        }
+      }
+    } catch {
+      const { data: dbCards } = await supabase.from("cards").select("*, decks(subject)").limit(50);
+      if (dbCards && dbCards.length > 0) {
+        const all = (dbCards as unknown as DBCard[]).map(dbCardToStudyCard);
+        const session = all.sort(() => Math.random() - 0.5).slice(0, 5);
+        setCards(assignVariety(session, all));
+        setTotalCards(dbCards.length);
+      }
+    }
+    setLoading(false);
+  }
 
-  const currentCard = cards[currentIndex];
+  function handleStart() {
+    setPhase("studying");
+    setCurrentIndex(0);
+    setCorrectCount(0);
+    setAnswered(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }
 
-  const handleSubmitAnswer = useCallback(
-    (answer: string) => {
-      if (!currentCard) return;
-      setUserAnswer(answer);
-      const result = checkAnswer(answer, currentCard.back);
-      setIsCorrect(result.correct);
-      setIsClose(result.close);
-      setState("revealed");
-    },
-    [currentCard]
-  );
+  function handleAnswer(answer: string) {
+    const card = cards[currentIndex];
+    if (!card) return;
+    setUserAnswer(answer);
+    const result = checkAnswer(answer, card.back);
+    setIsCorrect(result.correct);
+    setIsClose(result.close);
+    if (result.correct) setCorrectCount((c) => c + 1);
+    setAnswered(true);
+    setEnrichField(Math.floor(Math.random() * 3));
+    // Record in FSRS
+    const rating = actionToRating(result.correct, hintUsed, false);
+    recordReview(card.subject, result.correct, rating >= 3 ? 1 : 0);
+  }
 
-  const handleMultipleChoice = useCallback(
-    (choice: string) => {
-      if (!currentCard) return;
-      setSelectedChoice(choice);
-      setUserAnswer(choice);
-      const correct = choice === currentCard.back;
-      setIsCorrect(correct);
-      setIsClose(false);
-      setState("revealed");
-    },
-    [currentCard]
-  );
+  function handleMC(choice: string) {
+    const card = cards[currentIndex];
+    if (!card) return;
+    setUserAnswer(choice);
+    const correct = choice === card.back;
+    setIsCorrect(correct);
+    setIsClose(false);
+    if (correct) setCorrectCount((c) => c + 1);
+    setAnswered(true);
+    setEnrichField(Math.floor(Math.random() * 3));
+    recordReview(card.subject, correct, correct ? 1 : 0);
+  }
 
-  const handleTrueFalse = useCallback(
-    (answer: boolean) => {
-      if (!currentCard) return;
-      const correct = answer === currentCard.trueFalseAnswer;
-      setUserAnswer(answer ? "True" : "False");
-      setIsCorrect(correct);
-      setIsClose(false);
-      setState("revealed");
-    },
-    [currentCard]
-  );
+  function handleTF(answer: boolean) {
+    const card = cards[currentIndex];
+    if (!card) return;
+    const correct = answer === card.trueFalseAnswer;
+    setUserAnswer(answer ? "True" : "False");
+    setIsCorrect(correct);
+    if (correct) setCorrectCount((c) => c + 1);
+    setAnswered(true);
+    setEnrichField(Math.floor(Math.random() * 3));
+    recordReview(card.subject, correct, correct ? 1 : 0);
+  }
 
-  const handleFillBlank = useCallback(
-    (answer: string) => {
-      if (!currentCard) return;
-      setUserAnswer(answer);
-      const result = checkAnswer(answer, currentCard.back);
-      setIsCorrect(result.correct);
-      setIsClose(result.close);
-      setState("revealed");
-    },
-    [currentCard]
-  );
-
-  const handleGiveUp = useCallback(() => {
-    if (!currentCard) return;
+  function handleSkip() {
     setUserAnswer("");
     setIsCorrect(false);
-    setIsClose(false);
-    setGaveUp(true);
-    setState("revealed");
-  }, [currentCard]);
+    setAnswered(true);
+    setEnrichField(Math.floor(Math.random() * 3));
+    const card = cards[currentIndex];
+    if (card) recordReview(card.subject, false, 0);
+  }
 
-  const handleRate = useCallback(
-    (correct: boolean) => {
-      if (!currentCard) return;
-      const rating = actionToRating(correct, hintUsed, gaveUp);
-      const newState = fsrsReview(
-        { stability: currentCard.easiness, difficulty: 5.0, lastReviewAt: new Date(), nextReviewAt: currentCard.nextReviewAt, reps: currentCard.repetitions },
-        rating
-      );
-      recordReview(currentCard.subject, correct, rating >= 3 ? 1 : 0);
-      setCards((prev) =>
-        prev.map((c) =>
-          c.id === currentCard.id
-            ? { ...c, easiness: newState.stability, interval: Math.round(newState.stability), repetitions: newState.reps, nextReviewAt: newState.nextReviewAt }
-            : c
-        )
-      );
-      if (correct) setCorrectCount((c) => c + 1);
+  function handleNext() {
+    if (currentIndex + 1 >= cards.length) {
+      recordSessionComplete();
+      const result = earnSessionPoints(cards.length > 0 ? correctCount / cards.length : 0);
+      setStreak(result.earned);
+      setPhase("done");
+    } else {
+      setCurrentIndex((i) => i + 1);
+      setAnswered(false);
+      setUserAnswer("");
+      setHintUsed(false);
+      setShowHint(false);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }
 
-      if (currentIndex + 1 >= cards.length) {
-        recordSessionComplete();
-        setState("complete");
-      } else {
-        setCurrentIndex((i) => i + 1);
-        setState("active");
-        setUserAnswer("");
-        setSelectedChoice(null);
-        setHintUsed(false);
-        setGaveUp(false);
-      }
-    },
-    [currentCard, currentIndex, cards.length, hintUsed, gaveUp]
-  );
+  async function handleMore() {
+    setPhase("start");
+    setCurrentIndex(0);
+    setCorrectCount(0);
+    setAnswered(false);
+    setHintUsed(false);
+    setShowHint(false);
+    await loadSession();
+  }
 
-  const handleRestart = useCallback(() => {
-    startSession(subjectFilter);
-  }, [startSession, subjectFilter]);
+  const card = cards[currentIndex];
+  const accuracy = cards.length > 0 ? Math.round((correctCount / Math.max(1, currentIndex + (answered ? 1 : 0))) * 100) : 0;
 
+  // Loading
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="fixed inset-0 bg-gray-950 flex items-center justify-center">
         <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
       </div>
     );
   }
 
-  if (cards.length === 0) {
+  // START SCREEN
+  if (phase === "start") {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="text-4xl mb-4">✅</div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">All caught up!</h2>
-        <p className="text-sm text-gray-500 mb-6">
-          {subjectFilter === "all" ? "No cards are due for review right now." : `No ${subjectFilter} cards due right now.`}
-        </p>
-        <SubjectPicker current={subjectFilter} onSelect={startSession} cardCounts={cardCounts} />
-      </div>
-    );
-  }
-
-  if (state === "complete") {
-    return (
-      <div>
-        <SessionComplete total={cards.length} correctCount={correctCount} onRestart={handleRestart} />
-        {remainingDue > 0 && (
-          <div className="text-center mt-4">
-            <p className="text-sm text-gray-500 mb-2">{remainingDue} more cards still due</p>
-            <button
-              onClick={handleRestart}
-              className="px-4 py-2 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
-            >
-              Continue studying →
-            </button>
-          </div>
+      <div className="min-h-[80vh] flex flex-col items-center justify-center px-6 text-center">
+        <div className="text-5xl mb-6">🪁</div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Ready to study?</h1>
+        {studyReason && (
+          <p className="text-sm text-blue-600 mb-1">📋 {studyReason} — due soon</p>
+        )}
+        <p className="text-sm text-gray-500 mb-8">{totalCards} cards waiting · 5 cards, ~2 minutes</p>
+        <button
+          onClick={handleStart}
+          className="w-full max-w-xs py-4 rounded-2xl bg-blue-600 text-white text-lg font-bold hover:bg-blue-700 active:scale-95 transition-all shadow-lg"
+        >
+          Start
+        </button>
+        {cards.length === 0 && (
+          <p className="text-sm text-gray-400 mt-4">No cards available. Import some from the Admin tab.</p>
         )}
       </div>
     );
   }
 
+  // DONE SCREEN
+  if (phase === "done") {
+    const pct = cards.length > 0 ? Math.round((correctCount / cards.length) * 100) : 0;
+    return (
+      <div className="min-h-[80vh] flex flex-col items-center justify-center px-6 text-center">
+        <div className="text-6xl mb-4">{pct >= 80 ? "🎉" : pct >= 50 ? "👍" : "💪"}</div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">{correctCount}/{cards.length} correct</h1>
+        <p className="text-3xl font-bold text-blue-600 mb-2">{pct}%</p>
+        <p className="text-sm text-amber-600 mb-6">⭐ +{streak} pts earned</p>
+        <button
+          onClick={handleMore}
+          className="w-full max-w-xs py-4 rounded-2xl bg-blue-600 text-white text-lg font-bold hover:bg-blue-700 active:scale-95 transition-all shadow-lg mb-3"
+        >
+          Do 5 more
+        </button>
+        <button
+          onClick={() => setPhase("start")}
+          className="w-full max-w-xs py-3 rounded-2xl bg-gray-100 text-gray-700 text-sm font-medium"
+        >
+          Done for now
+        </button>
+      </div>
+    );
+  }
+
+  // STUDYING — full screen card experience
+  if (!card) return null;
+
+  const enrichments = [
+    card.realWorldConnection ? { icon: "📱", label: "Real-world", text: card.realWorldConnection } : null,
+    card.tokConnection ? { icon: "🧠", label: "How do we know?", text: card.tokConnection } : null,
+    card.interdisciplinary ? { icon: "🔗", label: "Across subjects", text: card.interdisciplinary } : null,
+  ].filter(Boolean);
+  const currentEnrich = enrichments[enrichField % enrichments.length];
+
   return (
-    <div className="flex flex-col items-center w-full">
-      <SubjectPicker current={subjectFilter} onSelect={startSession} cardCounts={cardCounts} />
-      <StudyTimer />
-      <ProgressBar current={currentIndex} total={cards.length} correctCount={correctCount} />
+    <div className="min-h-[80vh] flex flex-col px-4 py-4">
+      {/* Progress dots */}
+      <div className="flex gap-1 justify-center mb-6">
+        {cards.map((_, i) => (
+          <div
+            key={i}
+            className={`h-1.5 rounded-full transition-all ${
+              i < currentIndex ? "w-6 bg-blue-500" :
+              i === currentIndex ? "w-8 bg-blue-600" :
+              "w-4 bg-gray-300"
+            }`}
+          />
+        ))}
+      </div>
 
       {/* Card */}
-      <FlashCard
-        flipped={state === "revealed"}
-        front={
-          <div className="flex flex-col items-center gap-2 w-full">
-            <div className="flex items-center gap-2">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${SUBJECT_COLORS[currentCard.subject] || "bg-gray-100 text-gray-700"}`}>
-                {currentCard.subject}
-              </span>
-              <span className="text-xs text-gray-400 capitalize">{currentCard.answerType.replace("-", " ")}</span>
-            </div>
-            {currentCard.imageUrl && (
-              <img src={currentCard.imageUrl} alt="" className="w-full max-w-[180px] h-auto rounded-lg" />
-            )}
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center">{currentCard.front}</h2>
-              {currentCard.subject === "spanish" && <AudioButton text={currentCard.front} lang={currentCard.audioLang} />}
-            </div>
-            {currentCard.answerType === "fill-blank" && currentCard.blankSentence && (
-              <p className="text-base text-gray-500 italic text-center">{currentCard.blankSentence}</p>
-            )}
-            {currentCard.answerType === "true-false" && currentCard.trueFalseStatement && (
-              <p className="text-base text-gray-600 text-center border border-gray-200 rounded-lg p-3 bg-gray-50">
-                &ldquo;{currentCard.trueFalseStatement}&rdquo;
+      <div className="flex-1 flex flex-col items-center justify-center">
+        {!answered ? (
+          <>
+            {/* Subject tag */}
+            <span className={`text-xs font-medium uppercase tracking-wide mb-3 ${SUBJECT_COLORS[card.subject] || "text-gray-400"}`}>
+              {card.subject}
+            </span>
+
+            {/* Image */}
+            {card.imageUrl && <img src={card.imageUrl} alt="" className="w-full max-w-[200px] h-auto rounded-lg mb-4" />}
+
+            {/* Question */}
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center mb-6 leading-snug">
+              {card.front}
+            </h2>
+
+            {/* True/False statement */}
+            {card.answerType === "true-false" && card.trueFalseStatement && (
+              <p className="text-base text-gray-600 text-center bg-gray-50 rounded-xl p-4 mb-4 max-w-sm">
+                &ldquo;{card.trueFalseStatement}&rdquo;
               </p>
             )}
-          </div>
-        }
-        back={
-          <div className="flex flex-col items-center gap-2 w-full">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isCorrect ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-              {isCorrect ? (isClose ? "Close enough!" : "Correct!") : "Incorrect"}
-            </span>
-            <p className="text-xl font-bold text-gray-900 text-center">{currentCard.back}</p>
-            {currentCard.imageUrl && (
-              <img src={currentCard.imageUrl} alt="" className="w-full max-w-[140px] h-auto rounded-lg" />
-            )}
-            {!isCorrect && currentCard.explanation && (
-              <div className="w-full bg-red-50 border border-red-200 rounded-lg p-2">
-                <p className="text-xs font-medium text-red-800 mb-1">Why?</p>
-                <p className="text-xs text-red-700">{currentCard.explanation}</p>
-              </div>
-            )}
-            {currentCard.realWorldConnection && (
-              <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-2">
-                <p className="text-xs font-medium text-blue-800 mb-1">Real-world</p>
-                <p className="text-xs text-blue-700">{currentCard.realWorldConnection}</p>
-              </div>
-            )}
-            {currentCard.tokConnection && (
-              <div className="w-full bg-amber-50 border border-amber-200 rounded-lg p-2">
-                <p className="text-xs font-medium text-amber-800 mb-1">TOK / How do we know?</p>
-                <p className="text-xs text-amber-700">{currentCard.tokConnection}</p>
-              </div>
-            )}
-            {currentCard.interdisciplinary && (
-              <div className="w-full bg-purple-50 border border-purple-200 rounded-lg p-2">
-                <p className="text-xs font-medium text-purple-800 mb-1">Across subjects</p>
-                <p className="text-xs text-purple-700">{currentCard.interdisciplinary}</p>
-              </div>
-            )}
-            {currentCard.inquiryQuestion && (
-              <div className="w-full bg-green-50 border border-green-200 rounded-lg p-2">
-                <p className="text-xs font-medium text-green-800 mb-1">Think deeper</p>
-                <p className="text-xs text-green-700 italic">{currentCard.inquiryQuestion}</p>
-              </div>
-            )}
-          </div>
-        }
-      />
 
-      {/* Answer Input Area */}
-      <div className="w-full mt-6">
-        {state === "active" && currentCard.answerType === "type" && (
-          <TypeInput
-            onSubmit={handleSubmitAnswer}
-            onGiveUp={handleGiveUp}
-            onHintUsed={() => setHintUsed(true)}
-            hint={currentCard.back.slice(0, Math.ceil(currentCard.back.length / 3)) + "..."}
-          />
-        )}
-        {state === "active" && currentCard.answerType === "fill-blank" && (
-          <TypeInput
-            onSubmit={handleFillBlank}
-            onGiveUp={handleGiveUp}
-            onHintUsed={() => setHintUsed(true)}
-            hint={currentCard.back[0] + "_".repeat(currentCard.back.length - 1)}
-            placeholder="Fill in the blank..."
-          />
-        )}
-        {state === "active" && currentCard.answerType === "multiple-choice" && currentCard.choices && (
-          <div className="grid grid-cols-1 gap-2">
-            {currentCard.choices.map((choice) => (
-              <button
-                key={choice}
-                onClick={() => handleMultipleChoice(choice)}
-                className="w-full py-3 px-4 rounded-lg border border-gray-300 bg-white text-sm text-left text-gray-900 hover:bg-gray-50 active:bg-gray-100 transition-colors"
-              >
-                {choice}
-              </button>
-            ))}
-          </div>
-        )}
-        {state === "active" && currentCard.answerType === "true-false" && (
-          <div className="flex gap-3">
-            <button
-              onClick={() => handleTrueFalse(true)}
-              className="flex-1 py-3 rounded-lg border-2 border-green-200 bg-green-50 text-green-700 font-medium hover:bg-green-100 transition-colors"
-            >
-              True
-            </button>
-            <button
-              onClick={() => handleTrueFalse(false)}
-              className="flex-1 py-3 rounded-lg border-2 border-red-200 bg-red-50 text-red-700 font-medium hover:bg-red-100 transition-colors"
-            >
-              False
-            </button>
-          </div>
-        )}
+            {/* Answer input */}
+            <div className="w-full max-w-sm">
+              {card.answerType === "multiple-choice" && card.choices && (
+                <div className="space-y-2">
+                  {card.choices.map((choice) => (
+                    <button
+                      key={choice}
+                      onClick={() => handleMC(choice)}
+                      className="w-full py-3.5 px-4 rounded-xl border border-gray-200 bg-white text-sm text-left text-gray-900 hover:bg-blue-50 hover:border-blue-300 active:scale-[0.98] transition-all"
+                    >
+                      {choice}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-        {/* Revealed: auto-graded, just show Next */}
-        {state === "revealed" && (
-          <div className="w-full mt-2">
+              {card.answerType === "true-false" && (
+                <div className="flex gap-3">
+                  <button onClick={() => handleTF(true)} className="flex-1 py-4 rounded-xl bg-green-50 border-2 border-green-200 text-green-700 font-bold text-lg hover:bg-green-100 active:scale-95 transition-all">True</button>
+                  <button onClick={() => handleTF(false)} className="flex-1 py-4 rounded-xl bg-red-50 border-2 border-red-200 text-red-700 font-bold text-lg hover:bg-red-100 active:scale-95 transition-all">False</button>
+                </div>
+              )}
+
+              {(card.answerType === "type" || card.answerType === "fill-blank") && (
+                <>
+                  {card.answerType === "fill-blank" && card.blankSentence && (
+                    <p className="text-xs text-gray-400 text-center mb-2">{card.blankSentence}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={userAnswer}
+                      onChange={(e) => setUserAnswer(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && userAnswer.trim()) handleAnswer(userAnswer); }}
+                      placeholder="Type your answer..."
+                      className="flex-1 px-4 py-3.5 rounded-xl border border-gray-200 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => userAnswer.trim() && handleAnswer(userAnswer)}
+                      disabled={!userAnswer.trim()}
+                      className="px-5 py-3.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-30 active:scale-95 transition-all"
+                    >
+                      →
+                    </button>
+                  </div>
+                  {/* Hint + Skip */}
+                  <div className="flex gap-3 mt-3">
+                    <button
+                      onClick={() => { setShowHint(true); setHintUsed(true); }}
+                      className="flex-1 py-2 rounded-xl text-xs text-amber-600 hover:bg-amber-50 transition-colors"
+                    >
+                      {showHint ? `💡 ${card.back.slice(0, Math.ceil(card.back.length / 3))}...` : "💡 Hint"}
+                    </button>
+                    <button
+                      onClick={handleSkip}
+                      className="flex-1 py-2 rounded-xl text-xs text-gray-400 hover:bg-gray-50 transition-colors"
+                    >
+                      🤷 Skip
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          /* ANSWERED — show result */
+          <>
+            {/* Result badge */}
+            <div className={`text-4xl mb-3 ${isCorrect ? "animate-bounce" : ""}`}>
+              {isCorrect ? "✅" : "❌"}
+            </div>
+
+            <p className={`text-sm font-medium mb-2 ${isCorrect ? "text-green-600" : "text-red-600"}`}>
+              {isCorrect ? (isClose ? "Close enough!" : "Correct!") : "Not quite"}
+            </p>
+
+            {/* Correct answer */}
+            <p className="text-xl font-bold text-gray-900 text-center mb-4">{card.back}</p>
+
+            {/* Wrong answer explanation */}
+            {!isCorrect && card.explanation && (
+              <div className="w-full max-w-sm bg-red-50 rounded-xl p-3 mb-3">
+                <p className="text-xs text-red-700">{card.explanation}</p>
+              </div>
+            )}
+
+            {/* ONE enrichment field (rotated) */}
+            {currentEnrich && (
+              <div className="w-full max-w-sm bg-gray-50 rounded-xl p-3 mb-6">
+                <p className="text-xs text-gray-500 mb-1">{currentEnrich.icon} {currentEnrich.label}</p>
+                <p className="text-sm text-gray-700">{currentEnrich.text}</p>
+              </div>
+            )}
+
+            {/* Next button */}
             <button
-              onClick={() => handleRate(isCorrect)}
-              className={`w-full py-3 rounded-lg font-medium transition-colors ${
-                isCorrect
-                  ? "border-2 border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
-                  : "border-2 border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+              onClick={handleNext}
+              className={`w-full max-w-xs py-4 rounded-2xl text-lg font-bold active:scale-95 transition-all shadow-lg ${
+                isCorrect ? "bg-green-600 text-white hover:bg-green-700" : "bg-red-500 text-white hover:bg-red-600"
               }`}
             >
-              {isCorrect ? "Correct! Next →" : "Missed — Next →"}
+              {currentIndex + 1 >= cards.length ? "See results" : "Next →"}
             </button>
-          </div>
+          </>
         )}
       </div>
-    </div>
-  );
-}
-
-function TypeInput({ onSubmit, onGiveUp, onHintUsed, hint, placeholder }: { onSubmit: (v: string) => void; onGiveUp?: () => void; onHintUsed?: () => void; hint?: string; placeholder?: string }) {
-  const [value, setValue] = useState("");
-  const [showHint, setShowHint] = useState(false);
-  return (
-    <div className="w-full">
-      <div className="flex gap-2 w-full">
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && value.trim()) { onSubmit(value); setValue(""); } }}
-          placeholder={placeholder || "Type your answer..."}
-          className="flex-1 px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none text-sm"
-          autoFocus
-        />
-        <button
-          onClick={() => { if (value.trim()) { onSubmit(value); setValue(""); } }}
-          disabled={!value.trim()}
-          className="px-5 py-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
-          Check
-        </button>
-      </div>
-      <div className="flex gap-2 mt-2">
-        {hint && (
-          <button
-            onClick={() => { setShowHint(true); onHintUsed?.(); }}
-            className="flex-1 py-2 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-colors"
-          >
-            {showHint ? `Hint: ${hint}` : "Show Hint 💡"}
-          </button>
-        )}
-        {onGiveUp && (
-          <button
-            onClick={onGiveUp}
-            className="flex-1 py-2 rounded-lg border border-gray-300 bg-gray-50 text-gray-600 text-xs font-medium hover:bg-gray-100 transition-colors"
-          >
-            I don&apos;t know 🤷
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const SUBJECT_OPTIONS: { key: SubjectFilter; label: string; color: string }[] = [
-  { key: "all", label: "All Subjects", color: "bg-gray-900 text-white border-gray-900" },
-  { key: "spanish", label: "Spanish", color: "bg-orange-500 text-white border-orange-500" },
-  { key: "biology", label: "Biology", color: "bg-green-500 text-white border-green-500" },
-  { key: "english", label: "English", color: "bg-purple-500 text-white border-purple-500" },
-  { key: "math", label: "Math", color: "bg-blue-500 text-white border-blue-500" },
-];
-
-function SubjectPicker({ current, onSelect, cardCounts }: { current: SubjectFilter; onSelect: (s: SubjectFilter) => void; cardCounts?: Record<string, number> }) {
-  return (
-    <div className="flex gap-2 overflow-x-auto pb-3 mb-3 w-full scrollbar-hide">
-      {SUBJECT_OPTIONS.map((s) => (
-        <button
-          key={s.key}
-          onClick={() => onSelect(s.key)}
-          className={`shrink-0 text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-            current === s.key ? s.color : "bg-white text-gray-700 border-gray-300"
-          }`}
-        >
-          {s.label}
-          {cardCounts && cardCounts[s.key] !== undefined && (
-            <span className="ml-1 opacity-75">({cardCounts[s.key]})</span>
-          )}
-        </button>
-      ))}
     </div>
   );
 }

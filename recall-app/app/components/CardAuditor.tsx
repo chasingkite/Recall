@@ -117,6 +117,15 @@ export default function CardAuditor() {
     return [...distractors, card.back].sort(() => Math.random() - 0.5);
   }
 
+  // Assign a preview format to current card
+  const [previewFormat, setPreviewFormat] = useState<"type" | "multiple-choice" | "fill-blank" | "true-false">("type");
+
+  function shuffleFormat() {
+    const formats: ("type" | "multiple-choice" | "fill-blank" | "true-false")[] = ["type", "multiple-choice", "fill-blank", "true-false"];
+    const next = formats[(formats.indexOf(previewFormat) + 1) % formats.length];
+    setPreviewFormat(next);
+  }
+
   function goNext() {
     if (currentIndex < filtered.length - 1) {
       setCurrentIndex(currentIndex + 1);
@@ -287,9 +296,8 @@ export default function CardAuditor() {
               {currentCard.audio_lang && currentCard.decks?.subject === "spanish" && (
                 <AudioButton text={currentCard.front} lang={currentCard.audio_lang} />
               )}
-              {/* Preview answer choices as student would see them */}
+              {/* Preview answer choices */}
               <div className="w-full mt-3 border-t border-gray-100 pt-3">
-                <p className="text-xs text-gray-400 mb-2 text-center">Student sees one of these formats:</p>
                 <div className="space-y-1.5">
                   {getPreviewChoices(currentCard)?.map((choice, i) => (
                     <div key={i} className={`py-2 px-3 rounded-lg border text-sm ${choice === currentCard.back ? "border-green-300 bg-green-50 text-green-800 font-medium" : "border-gray-200 bg-white text-gray-700"}`}>
