@@ -396,7 +396,7 @@ export default function StudyTab() {
                       onClick={handleSkip}
                       className="flex-1 py-2 rounded-xl text-xs text-gray-400 hover:bg-gray-50 transition-colors"
                     >
-                      🤷 Skip
+                      🤷 I don&apos;t know
                     </button>
                   </div>
                 </>
@@ -418,18 +418,30 @@ export default function StudyTab() {
             {/* Correct answer */}
             <p className="text-xl font-bold text-gray-900 text-center mb-4">{card.back}</p>
 
-            {/* Wrong answer explanation */}
-            {!isCorrect && card.explanation && (
-              <div className="w-full max-w-sm bg-red-50 rounded-xl p-3 mb-3">
-                <p className="text-xs text-red-700">{card.explanation}</p>
+            {/* Always show explanation */}
+            {card.explanation && (
+              <div className={`w-full max-w-sm rounded-xl p-3 mb-3 ${isCorrect ? "bg-blue-50" : "bg-red-50"}`}>
+                <p className={`text-xs ${isCorrect ? "text-blue-700" : "text-red-700"}`}>{card.explanation}</p>
               </div>
             )}
 
-            {/* ONE enrichment field (rotated) */}
-            {currentEnrich && (
-              <div className="w-full max-w-sm bg-gray-50 rounded-xl p-3 mb-6">
-                <p className="text-xs text-gray-500 mb-1">{currentEnrich.icon} {currentEnrich.label}</p>
-                <p className="text-sm text-gray-700">{currentEnrich.text}</p>
+            {/* Show ALL enrichment fields */}
+            {card.realWorldConnection && (
+              <div className="w-full max-w-sm bg-gray-50 rounded-xl p-3 mb-2">
+                <p className="text-xs text-gray-500 mb-1">📱 Real-world</p>
+                <p className="text-sm text-gray-700">{card.realWorldConnection}</p>
+              </div>
+            )}
+            {card.tokConnection && (
+              <div className="w-full max-w-sm bg-amber-50 rounded-xl p-3 mb-2">
+                <p className="text-xs text-amber-600 mb-1">🧠 How do we know?</p>
+                <p className="text-sm text-amber-700">{card.tokConnection}</p>
+              </div>
+            )}
+            {card.interdisciplinary && (
+              <div className="w-full max-w-sm bg-purple-50 rounded-xl p-3 mb-6">
+                <p className="text-xs text-purple-600 mb-1">🔗 Across subjects</p>
+                <p className="text-sm text-purple-700">{card.interdisciplinary}</p>
               </div>
             )}
 
