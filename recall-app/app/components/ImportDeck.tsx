@@ -8,6 +8,7 @@ interface ImportedCard {
   back: string;
   subject: string;
   answerType: string;
+  choices?: string[];
   explanation?: string;
   tokConnection?: string;
   interdisciplinary?: string;
@@ -29,13 +30,13 @@ export default function ImportDeck() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  function parseCSV(text: string): { front: string; back: string }[] {
+  function parseCSV(text: string): { front: string; back: string; choices?: string[] }[] {
     const lines = text.trim().split("\n");
-    const cards: { front: string; back: string }[] = [];
+    const cards: { front: string; back: string; choices?: string[] }[] = [];
 
     // Skip header row if it looks like one
     const firstLine = lines[0]?.toLowerCase().trim();
-    const startIdx = (firstLine === "front,back" || firstLine === "front,back,topic" || firstLine?.startsWith("front\tback")) ? 1 : 0;
+    const startIdx = (firstLine?.startsWith("front")) ? 1 : 0;
 
     for (let i = startIdx; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -48,39 +49,47 @@ export default function ImportDeck() {
         continue;
       }
 
-      // Try CSV with proper parsing (handles commas inside quoted fields)
-      const csvMatch = line.match(/^"([^"]+)"\s*,\s*"?([^"]*(?:"[^"]*"[^"]*)*)"?\s*(?:,.*)?$/);
-      if (csvMatch) {
-        cards.push({ front: csvMatch[1].trim(), back: csvMatch[2].replace(/^"|"$/g, "").trim() });
-        continue;
-      }
-
-      // Simple comma-separated: take first two fields only, ignore third (topic)
-      const parts = line.split(",");
-      if (parts.length >= 2) {
-        const front = parts[0].trim();
-        // Back is everything between first and last comma (in case back has no commas)
-        // If 3+ parts, last part is likely topic — exclude it
-        let back: string;
-        if (parts.length > 2) {
-          // Check if last part looks like a topic (no spaces, short, lowercase)
-          const lastPart = parts[parts.length - 1].trim();
-          if (lastPart.length < 30 && !lastPart.includes(" ") && lastPart === lastPart.toLowerCase()) {
-            back = parts.slice(1, -1).join(",").trim();
-          } else {
-            back = parts.slice(1).join(",").trim();
-          }
+      // Parse quoted CSV fields properly
+      const fields: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (let j = 0; j < line.length; j++) {
+        const ch = line[j];
+        if (ch === '"') {
+          inQuotes = !inQuotes;
+        } else if (ch === ',' && !inQuotes) {
+          fields.push(current.trim());
+          current = "";
         } else {
-          back = parts[1].trim();
+          current += ch;
         }
-        if (front && back) cards.push({ front, back });
-        continue;
+      }
+      fields.push(current.trim());
+
+      if (fields.length < 2) continue;
+
+      const front = fields[0].replace(/^"|"$/g, "").trim();
+      let back = fields[1].replace(/^"|"$/g, "").trim();
+      let choices: string[] | undefined;
+
+      // Check for choices field (pipe-separated, usually last field with | in it)
+      for (let f = 2; f < fields.length; f++) {
+        const field = fields[f].replace(/^"|"$/g, "").trim();
+        if (field.includes("|")) {
+          choices = field.split("|").map(c => c.trim()).filter(c => c.length > 0);
+        }
       }
 
-      // Try pipe-separated
-      if (line.includes("|")) {
-        const [front, back] = line.split("|");
-        if (front && back) cards.push({ front: front.trim(), back: back.trim() });
+      // If 3+ fields and last looks like a topic (short, no spaces, lowercase), exclude from back
+      if (fields.length >= 3 && !choices) {
+        const lastField = fields[fields.length - 1].replace(/^"|"$/g, "").trim();
+        if (lastField.length < 30 && !lastField.includes(" ") && lastField === lastField.toLowerCase() && !lastField.includes("|")) {
+          // Last field is topic — don't include in back
+        }
+      }
+
+      if (front && back) {
+        cards.push({ front, back, choices });
       }
     }
 
@@ -100,7 +109,7 @@ export default function ImportDeck() {
         setError("No cards found. Use format: front,back or front\\tback (one per line)");
         return;
       }
-      setRawCards(parsed.map((c) => ({ ...c, subject, answerType: "type" })));
+      setRawCards(parsed.map((c) => ({ ...c, subject, answerType: c.choices ? "multiple-choice" : "type" })));
       setStep("preview");
     };
     reader.readAsText(file);
@@ -306,7 +315,8 @@ export default function ImportDeck() {
           deck_id: deck.id,
           front: c.front,
           back: c.back,
-          answer_type: c.answerType || "type",
+          answer_type: c.choices ? "multiple-choice" : (c.answerType || "type"),
+          choices: c.choices || null,
           topic: deckName || null,
           explanation: c.explanation || null,
           real_world_connection: c.realWorldConnection || null,
