@@ -35,6 +35,7 @@ export default function CardAuditor() {
   const [auditSummary, setAuditSummary] = useState<{ errors: number; warnings: number; clean: number } | null>(null);
   const [fixingId, setFixingId] = useState<string | null>(null);
   const [suggestedFix, setSuggestedFix] = useState<{ cardId: string; front: string; back: string; explanation: string } | null>(null);
+  const [fixAllProgress, setFixAllProgress] = useState<{ current: number; total: number; fixed: number } | null>(null);
   const supabase = createClient();
 
   useEffect(() => { loadCards(); }, [subjectFilter]);
@@ -69,6 +70,38 @@ export default function CardAuditor() {
     if (!suggestedFix) return;
     await supabase.from("cards").update({ front: suggestedFix.front, back: suggestedFix.back }).eq("id", cardId);
     setSuggestedFix(null);
+    loadCards();
+    runAudit();
+  }
+
+  async function fixAll() {
+    const fixable = issues.filter((i) => i.severity === "error" || i.severity === "warning");
+    const uniqueCards = [...new Map(fixable.map((i) => [i.cardId, i])).values()];
+    setFixAllProgress({ current: 0, total: uniqueCards.length, fixed: 0 });
+    let fixed = 0;
+
+    for (let idx = 0; idx < uniqueCards.length; idx++) {
+      const issue = uniqueCards[idx];
+      setFixAllProgress({ current: idx + 1, total: uniqueCards.length, fixed });
+      const card = cards.find((c) => c.id === issue.cardId);
+      if (!card) continue;
+
+      try {
+        const res = await fetch("/api/audit-fix", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ card: { front: card.front, back: card.back, subject: card.decks?.subject }, issue: issue.issue }),
+        });
+        const data = await res.json();
+        if (data.fix?.front && data.fix?.back) {
+          await supabase.from("cards").update({ front: data.fix.front, back: data.fix.back }).eq("id", issue.cardId);
+          fixed++;
+          setFixAllProgress({ current: idx + 1, total: uniqueCards.length, fixed });
+        }
+      } catch {}
+    }
+
+    setFixAllProgress(null);
     loadCards();
     runAudit();
   }
@@ -208,6 +241,23 @@ export default function CardAuditor() {
 
           {issues.length === 0 && <p className="text-center text-green-600 py-6 text-sm font-medium">All cards pass audit!</p>}
 
+          {issues.length > 0 && !fixAllProgress && (
+            <button
+              onClick={fixAll}
+              className="w-full mb-4 py-3 rounded-xl bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
+            >
+              Fix All {issues.length} Issues with AI
+            </button>
+          )}
+
+          {fixAllProgress && (
+            <div className="mb-4 rounded-xl bg-purple-50 border border-purple-200 p-4 text-center">
+              <div className="animate-spin h-6 w-6 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-2" />
+              <p className="text-sm font-medium text-purple-900">Fixing {fixAllProgress.current} of {fixAllProgress.total}...</p>
+              <p className="text-xs text-purple-600">{fixAllProgress.fixed} fixed so far</p>
+            </div>
+          )}
+
           <div className="space-y-2 max-h-[500px] overflow-y-auto">
             {issues.slice(0, 50).map((issue, i) => (
               <div key={`${issue.cardId}-${i}`} className={`rounded-lg border p-3 ${issue.severity === "error" ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
@@ -225,7 +275,12 @@ export default function CardAuditor() {
                     disabled={fixingId === issue.cardId}
                     className="shrink-0 px-2 py-1 rounded text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 disabled:opacity-50"
                   >
-                    {fixingId === issue.cardId ? "..." : "Fix AI"}
+                    {fixingId === issue.cardId ? (
+                      <span className="flex items-center gap-1">
+                        <span className="animate-spin inline-block h-3 w-3 border-2 border-purple-500 border-t-transparent rounded-full" />
+                        Fixing...
+                      </span>
+                    ) : "Fix AI"}
                   </button>
                 </div>
 

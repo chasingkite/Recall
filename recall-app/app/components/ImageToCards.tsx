@@ -13,7 +13,7 @@ interface GeneratedCard {
 
 export default function ImageToCards() {
   const [step, setStep] = useState<"upload" | "processing" | "preview" | "saving" | "done">("upload");
-  const [subject, setSubject] = useState("biology");
+  const [subject, setSubject] = useState("");
   const [deckName, setDeckName] = useState("");
   const [cards, setCards] = useState<GeneratedCard[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
@@ -62,8 +62,11 @@ export default function ImageToCards() {
     if (file) handleFile(file);
   }
 
+  const [savingStep, setSavingStep] = useState("");
+
   async function saveToSupabase() {
     setStep("saving");
+    setSavingStep("Enriching cards with TOK & real-world connections...");
     const supabase = createClient();
 
     // Step 1: Enrich cards with TOK/interdisciplinary
@@ -88,6 +91,7 @@ export default function ImageToCards() {
     } catch {}
 
     // Step 2: Create deck
+    setSavingStep("Creating deck...");
     const { data: deck, error: deckError } = await supabase
       .from("decks")
       .insert({ name: deckName || "Image Import", subject, shared: true })
@@ -101,6 +105,7 @@ export default function ImageToCards() {
     }
 
     // Step 3: Dedup
+    setSavingStep("Checking for duplicates...");
     const { data: existing } = await supabase
       .from("cards")
       .select("front, decks!inner(subject)")
@@ -130,6 +135,8 @@ export default function ImageToCards() {
     }
 
     // Step 4: Save
+    // Step 4: Save
+    setSavingStep(`Saving ${newCards.length} cards to database...`);
     const { error: insertError } = await supabase.from("cards").insert(newCards);
     if (insertError) {
       setError("Failed to save: " + insertError.message);
@@ -251,9 +258,10 @@ export default function ImageToCards() {
           </button>
           <button
             onClick={saveToSupabase}
-            className="flex-1 py-3 rounded-xl bg-green-600 text-white text-sm font-medium hover:bg-green-700"
+            disabled={!subject}
+            className="flex-1 py-3 rounded-xl bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
           >
-            Save {cards.length} Cards
+            {!subject ? "Select a subject first" : `Save ${cards.length} Cards`}
           </button>
         </div>
 
@@ -266,7 +274,7 @@ export default function ImageToCards() {
     return (
       <div className="w-full flex flex-col items-center py-12">
         <div className="animate-spin h-8 w-8 border-4 border-green-500 border-t-transparent rounded-full mb-4" />
-        <p className="text-sm font-medium text-gray-900">Saving cards...</p>
+        <p className="text-sm font-medium text-gray-900">{savingStep}</p>
       </div>
     );
   }

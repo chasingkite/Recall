@@ -23,7 +23,7 @@ export default function ImportDeck() {
   const [step, setStep] = useState<"upload" | "preview" | "enriching" | "done">("upload");
   const [rawCards, setRawCards] = useState<ImportedCard[]>([]);
   const [enrichedCards, setEnrichedCards] = useState<ImportedCard[]>([]);
-  const [subject, setSubject] = useState("spanish");
+  const [subject, setSubject] = useState("");
   const [deckName, setDeckName] = useState("");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -407,10 +407,10 @@ export default function ImportDeck() {
               </button>
               <button
                 onClick={saveToSupabase}
-                disabled={saving}
+                disabled={saving || !subject}
                 className="flex-1 py-3 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50"
               >
-                {saving ? "Saving..." : "Save to Recall"}
+                {saving ? "Saving..." : !subject ? "Select a subject first" : "Save to Recall"}
               </button>
             </>
           ) : (

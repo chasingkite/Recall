@@ -64,8 +64,11 @@ export async function GET() {
       issues.push({ cardId: card.id, front: front.slice(0, 60) || "(empty)", subject, issue: "Empty front or back", severity: "error" });
     }
 
-    // HTML artifacts
-    if (front.includes("&nbsp;") || back.includes("&nbsp;") || front.includes("<") || back.includes("<")) {
+    // HTML artifacts — but not math inequalities like < or >
+    const hasHtml = front.includes("&nbsp;") || back.includes("&nbsp;") ||
+      /&[a-z]+;/i.test(front) || /&[a-z]+;/i.test(back) ||
+      /<\/?[a-z][a-z0-9]*[\s>]/i.test(front) || /<\/?[a-z][a-z0-9]*[\s>]/i.test(back);
+    if (hasHtml) {
       issues.push({ cardId: card.id, front: front.slice(0, 60), subject, issue: "Contains HTML artifacts (&nbsp; or tags)", severity: "error" });
     }
 
