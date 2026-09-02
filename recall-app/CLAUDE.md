@@ -2,100 +2,17 @@
 
 ## Mission
 
-A spaced repetition study app for Hailey (9th grade) and Connor that uses scientifically-proven cognitive learning mechanics to build long-term memory retention across Spanish, Biology, English, and Math.
-
-## Core Principles
-
-### How Memory Works (Guide ALL card creation)
-
-1. **Active Recall (Testing Effect)**: The brain learns by RETRIEVING, not re-reading. Cards must force generation of answers from memory.
-2. **Forgetting Curve & Spaced Repetition (FSRS)**: Review right at the edge of forgetting. The app uses FSRS algorithm to personalize intervals per card per student.
-3. **Elaborative Encoding**: Anchor new facts to existing knowledge via TOK connections, interdisciplinary links, and real-world context.
-
-### Flashcard Design Rules
-
-**DO put on a flashcard:**
-- Arithmetic & math facts (instant recall)
-- Formulas & identities
-- Definitions & visual concepts
-- Strategy prompts ("When do you use X over Y?")
-- Pattern-recognition multiple choice (PSAT-style)
-- Vocabulary with retrieval prompts (not bare terms)
-
-**DO NOT put on a flashcard:**
-- Multi-step problems requiring scratch paper
-- Entire paragraphs or lists of 4+ items (violates atomic principle)
-- Definition-recall ("What is X?") when application-recall works better
-
-### The Atomic Principle
-
-One concept per card. If the back has more than ~2 sentences or tests multiple facts, split it. The brain should retrieve ONE thing instantly.
-
-**Bad:** "Properties of a parallelogram (4 things)" → listing from memory
-**Good:** "Opposite sides of a parallelogram are..." → "Parallel AND equal" (one fact)
-
-### Retrieval Prompts > Bare Terms
-
-Never put just a term on the front. Force the student to THINK.
-
-**Bad (Spanish):** "rojo" → "red"
-**Good:** "What is the Spanish word for the color of blood or fire?" → "rojo"
-
-**Bad (Math):** "What is the quadratic formula?" → recite formula
-**Good:** "When do you use the quadratic formula?" → "When you can't factor ax²+bx+c=0"
-
-**Bad (Biology):** "What is excretion?" → definition
-**Good:** "What process removes waste made by chemical reactions in cells?" → "excretion"
-
-### Math Cards: Two Layers
-
-Math has Procedural Execution (multi-step solving) and Fact/Concept Retrieval (instant recall). Flashcards serve the SECOND layer only — automating building blocks so working memory is free for complex problem-solving.
-
-**Card types for math:**
-- Instant facts: "x⁰ = ?" → "1"
-- Pattern recognition: "Even power of a negative is..." → "positive"
-- Strategy prompts: "You know 2 sides + included angle. Which method?" → "SAS"
-- PSAT-style MC: "Scale factor 5 → area ratio: A) 5 B) 10 C) 15 D) 25" → "D) 25"
-- Formula recall: "Volume of a cone =" → "⅓πr²h"
-
-### Enrichment Fields (AI-Generated)
-
-Every card gets 5 enrichment fields via Claude API:
-
-1. **explanation** — WHY the answer is correct + common mistakes (shown when wrong)
-2. **realWorldConnection** — Concrete example a teenager relates to (phones, sports, social media, school)
-3. **tokConnection** — Theory of Knowledge: HOW do we know this? Challenge assumptions about the nature of knowledge itself.
-4. **interdisciplinary** — Connect to 2+ other subjects explicitly. Show same idea in different fields.
-5. **inquiryQuestion** — Open-ended, no single correct answer. Makes the student pause and think critically.
-
-### Answer Type Variety
-
-Each study session mixes answer types to prevent pattern fatigue:
-
-- **Type-in** (hardest — pure active recall)
-- **Fill-in-the-blank** (partial cue)
-- **Multiple choice** (pattern recognition, auto-generated distractors)
-- **True/False** (Spanish only — "X means Y")
-- **Reverse** (Spanish only — show English, type Spanish)
-
-### Subject-Specific Guidelines
-
-**Spanish:** Use reverse cards. True/false works well. Include audio via Web Speech API. Connect to cultural context.
-
-**Math:** Follow the two-layer framework. No multi-step problems. Strategy prompts and pattern-recognition MC are highest value.
-
-**Biology:** Atomic facts about processes. Avoid cramming entire systems onto one card. Split by function/component.
-
-**English:** Literary terms as application ("identify the climax" not "define climax"). SAT vocab as contextual use, not dictionary definitions.
+A spaced repetition study app for Hailey (9th grade) and Connor that uses scientifically-proven cognitive learning mechanics to build long-term memory retention across Spanish, Biology, English, Math, and PE.
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16 + React 19 + TypeScript + Tailwind CSS v4
+- **Frontend**: Next.js 16 + React 19 + TypeScript + Tailwind CSS v4 (PWA)
 - **Database & Auth**: Supabase (PostgreSQL + Google OAuth)
-- **Spaced Repetition**: FSRS algorithm (per-card stability/difficulty)
-- **AI Enrichment**: Claude Haiku API for TOK/interdisciplinary generation
+- **Spaced Repetition**: FSRS v5 algorithm (per-card stability/difficulty/retrievability)
+- **AI**: Claude Haiku (`claude-haiku-4-5-20251001`) for enrichment, scoring, study sheets, gap analysis, audit fixes
+- **Canvas LMS**: Grade syncing and assignment tracking (student ID 81991)
 - **Hosting**: Vercel (chasingkite.com)
-- **Card Import**: CSV/TSV/Anki (.apkg) with deduplication
+- **Package manager**: yarn 1.x
 
 ## Users
 
@@ -103,37 +20,158 @@ Each study session mixes answer types to prevent pattern fatigue:
 - **Hailey (haileyoliviatran@gmail.com)**: Student, Canvas linked (ID: 81991), all subjects
 - **Connor (connorarestran@gmail.com)**: Student, no Canvas, English + Math
 
-## Improving Card Generation
+## Project Structure
 
-### When creating cards from study materials:
+```
+app/
+├── page.tsx                    # Main SPA shell — tabbed UI, role-based tabs
+├── login/page.tsx              # Google OAuth via Supabase
+├── auth/callback/route.ts      # OAuth code exchange
+├── components/
+│   ├── StudyTab.tsx             # Core study experience (start → sheet → studying → done)
+│   ├── DashboardTab.tsx         # Student Canvas assignments dashboard
+│   ├── ProgressTab.tsx          # Study stats + mastery bars + LearningLadder
+│   ├── RewardsTab.tsx           # Points economy + reward shop + parent gate
+│   ├── AdminTab.tsx             # Admin panel — import, audit, manage users
+│   ├── AdminDashboard.tsx       # Family dashboard — per-student grades, streaks, mastery
+│   ├── ImportDeck.tsx           # CSV/TSV/Anki import → AI enrichment → Supabase
+│   ├── ImageToCards.tsx         # Photo/PDF → Claude Vision → flashcards
+│   ├── CardAuditor.tsx          # Browse/edit/delete cards + rule-based audit + AI fix
+│   ├── StudySheet.tsx           # AI-generated pre-quiz review sheet
+│   ├── GapAnalysis.tsx          # Post-session weak topic analysis
+│   ├── LearningLadder.tsx       # Per-topic L1-L5 progression
+│   ├── StreakBadge.tsx           # Streak display with freeze count
+│   ├── MemoryScoreWidget.tsx    # FSRS retrievability % with daily trend
+│   ├── CelebrationModal.tsx     # Confetti overlay on 20%+ memory improvement
+│   ├── CardView.tsx             # Reusable card display (MC, T/F, type, fill-blank)
+│   └── study/                   # AudioButton, FlashCard, StudyTimer, etc.
+├── api/
+│   ├── smart-session/           # FSRS-aware session builder + Canvas topic matching
+│   ├── card-review/             # FSRS v5 review recording + memory score
+│   ├── daily-progress/          # Daily goal tracking (20 cards)
+│   ├── streaks/                 # Streak data (current, longest, freezes)
+│   ├── topic-levels/            # Learning ladder progression (L1-L5)
+│   ├── points/                  # Points economy (earn, redeem, approve/deny)
+│   ├── enrich/                  # Claude Haiku — 5 enrichment fields per card
+│   ├── score-explanation/       # AI scoring for explain-back answers
+│   ├── study-sheet/             # AI pre-quiz study sheet generation
+│   ├── gap-analysis/            # AI post-session weak topic analysis
+│   ├── image-to-cards/          # Claude Vision — extract cards from photos/PDFs
+│   ├── audit/                   # Rule-based card quality scan
+│   ├── audit-fix/               # AI-suggested card fixes
+│   ├── audit-correctness/       # AI fact-checking for imported cards
+│   ├── assign-topics/           # AI topic categorization
+│   ├── canvas/                  # Direct Canvas API proxy
+│   ├── canvas-sync/             # Cached Canvas data (1-hour TTL)
+│   └── seed/                    # DB seeding endpoint
+└── lib/
+    ├── spaced-repetition.ts     # Client-side FSRS + answer checking (Levenshtein, normalization)
+    ├── sample-cards.ts          # StudyCard type + sample data (MAX_SESSION_SIZE = 20)
+    ├── study-stats.ts           # localStorage stats (legacy — server-side is primary)
+    ├── points.ts                # Client-side points API wrapper
+    └── supabase/                # client.ts (browser), server.ts (SSR), db-types.ts
+```
 
-1. Read the source material (PDF/textbook)
-2. Identify vocabulary panels, theorem boxes, key concepts
-3. Apply the atomic principle — one fact per card
-4. Write retrieval prompts (not bare terms)
-5. For math: categorize as fact/formula/strategy/pattern-MC
-6. Export as CSV (front, back, topic)
-7. Import via Admin → Enrich with AI → Save to Recall
-8. Dedup automatically prevents duplicates
+## Architecture
 
-### Quality checklist before export:
+### SPA with Tab Navigation
+Single `page.tsx` renders all tabs client-side. Admin sees Dashboard + Study + Progress + Admin. Students see Dashboard + Study + Progress + Rewards. Default tab: Dashboard for Canvas-linked/admin users, Study for others.
 
-- [ ] Is each card atomic? (one concept only)
-- [ ] Does the front force retrieval? (not just "What is X?")
-- [ ] For math: is it fact-retrieval, NOT a multi-step problem?
-- [ ] For Spanish: are there reverse-direction cards?
-- [ ] Are PSAT-style MC cards included for pattern recognition?
-- [ ] Would a student need scratch paper? If yes → don't make it a card
+### Study Flow
+1. **Start screen**: Streak badge, memory score widget, daily goal progress (20 cards)
+2. **Study sheet** (optional): AI-generated review of upcoming topics
+3. **Card-by-card quiz**: 6 answer types — type-in (35%), MC (30%), T/F (20%), fill-blank (15%), explain-back (10%), reverse (Spanish only)
+4. **Answer checking**: Levenshtein ≤1, unicode/superscript normalization, parenthetical stripping
+5. **FSRS update**: Server-side stability/difficulty/interval update per card
+6. **Wrong card re-queue**: Missed cards appended for retry
+7. **Done screen**: Results, points earned, daily goal progress, gap analysis
+8. **Post-session**: Gap analysis identifies weak topics, sets next-session focus
 
-### Converting Anki decks:
+### Card Import Pipeline
+- **CSV/TSV**: Parse → preview → enrich (batches of 3, Claude Haiku) → dedup → save
+- **Image/PDF**: Upload → Claude Vision extracts cards → preview → enrich → dedup → save
+- **Anki .apkg**: Extract SQLite → parse notes → strip HTML → export TSV → import
+- Subject must be selected before saving (no default — prevents mistagging)
 
-1. Extract .apkg (it's a zip with SQLite)
-2. Parse the notes table (fields separated by \x1f)
-3. Strip HTML tags and [sound:] references
-4. Handle cloze deletions ({{c1::answer}}) → fill-blank format
-5. Export as TSV
-6. Filter for level-appropriate content
-7. Import + AI enrich
+### Card Audit System
+- **Rule-based scan**: Missing enrichments, too-long text, HTML artifacts, identical front/back, bare definition prompts
+- **AI fix**: Individual or batch "Fix All" — Claude rewrites flagged cards
+- **Correctness check**: AI fact-checks newly imported cards
+
+### Points & Rewards Economy
+- Earn: 10 pts/session, 50 for daily goal, 5-15 for accuracy, 25 for streak milestones, 30 for memory improvement
+- Spend: Game time (150-600 pts), movie night (800 pts), streak freeze (75 pts)
+- Parent gate: PIN "1234" to approve/deny redemptions
+
+### Learning Ladder
+Per-topic L1-L5 progression (Beginner → Expert). Level up at ≥80% accuracy on 10+ cards.
+
+### Canvas Integration
+- Grades and assignments fetched via parent observer token
+- Cached in Supabase `canvas_cache` (1-hour TTL)
+- Smart session prioritizes cards matching upcoming Canvas assignments
+
+## Database (Supabase)
+
+Key tables:
+- `profiles` — id, display_name, email, role, canvas_student_id, subjects[]
+- `decks` — id, name, subject, shared, created_by
+- `cards` — id, deck_id, front, back, answer_type, choices[], topic, enrichment fields
+- `card_reviews` — user_id, card_id, stability, difficulty, next_review_at, reps
+- `study_sessions` — user_id, cards_reviewed, cards_correct, topics[], subjects[]
+- `daily_progress` — user_id, date, cards_reviewed, cards_correct, goal_met
+- `memory_scores` — user_id, date, avg_retrievability, improvement_pct
+- `streaks` — user_id, current_streak, longest_streak, streak_freezes_owned
+- `points_ledger` — user_id, balance, total_earned
+- `points_transactions` — user_id, amount, reason, metadata
+- `redemptions` — id, user_id, reward_id, reward_name, cost, status
+- `canvas_cache` — student_id, data (JSONB), synced_at
+- `topic_levels` — per-topic L1-L5 progression
+- `push_subscriptions` — Web Push subscription storage (table scaffolded, not yet implemented)
+
+### Migration
+`supabase-migration.sql` at project root — creates all engagement tables, indexes, and RLS policies. Run in Supabase SQL Editor.
+
+## Core Principles
+
+### How Memory Works (Guide ALL card creation)
+
+1. **Active Recall**: Cards must force retrieval from memory, not re-reading.
+2. **Forgetting Curve & FSRS**: Review at the edge of forgetting. FSRS personalizes intervals.
+3. **Elaborative Encoding**: Anchor new facts via TOK, interdisciplinary, and real-world connections.
+
+### Flashcard Design Rules
+
+**DO:** Arithmetic facts, formulas, definitions, strategy prompts, pattern-recognition MC, vocabulary with retrieval prompts.
+
+**DON'T:** Multi-step problems, paragraphs/lists of 4+ items, bare definition-recall when application works better.
+
+### The Atomic Principle
+One concept per card. Back should be ≤2 sentences. Split multi-fact cards.
+
+### Retrieval Prompts > Bare Terms
+Never put just a term on the front. Force the student to think.
+
+### Math Cards: Two Layers
+Flashcards serve fact/concept retrieval only — instant facts, pattern recognition, strategy prompts, PSAT-style MC, formula recall. No multi-step solving.
+
+### Enrichment Fields (AI-Generated)
+Every card gets 5 fields via Claude API:
+1. **explanation** — Why the answer is correct + common mistakes
+2. **realWorldConnection** — Concrete teenager-relatable example
+3. **tokConnection** — Theory of Knowledge: how do we know this?
+4. **interdisciplinary** — Same idea across 2+ subjects
+5. **inquiryQuestion** — Open-ended critical thinking prompt
+
+### Answer Type Variety
+- **Type-in** (pure recall) / **Fill-blank** (partial cue) / **MC** (pattern recognition)
+- **True/False** / **Reverse** (Spanish only) / **Explain-back** (AI-scored free text)
+
+### Subject-Specific Guidelines
+- **Spanish**: Reverse cards, T/F, audio via Web Speech API, cultural context
+- **Math**: Two-layer framework, no multi-step, strategy prompts + pattern MC
+- **Biology**: Atomic process facts, split by function/component
+- **English**: Literary terms as application, SAT vocab as contextual use
 
 <!-- BEGIN:nextjs-agent-rules -->
 

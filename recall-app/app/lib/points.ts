@@ -5,116 +5,110 @@ export interface Reward {
   description: string;
 }
 
-export interface RedemptionRequest {
-  id: string;
-  rewardId: string;
-  rewardName: string;
-  cost: number;
-  requestedAt: string;
-  status: "pending" | "approved" | "denied";
-  approvedAt?: string;
-}
-
 export interface PointsData {
   balance: number;
-  totalEarned: number;
-  sessionsCompleted: number;
-  redemptions: RedemptionRequest[];
+  total_earned: number;
+  streak_freezes: number;
 }
 
-const STORAGE_KEY = "recall-points";
-
-const REWARDS: Reward[] = [
-  { id: "r1", name: "15 min Game Time", cost: 100, description: "Play your favorite game for 15 minutes" },
-  { id: "r2", name: "30 min Game Time", cost: 250, description: "A solid gaming session — 30 minutes" },
-  { id: "r3", name: "1 hour Game Time", cost: 500, description: "A full hour of uninterrupted gaming" },
-  { id: "r4", name: "Movie Night Pick", cost: 750, description: "You pick the movie for family movie night" },
-];
-
-const SESSION_POINTS = 50;
-const ACCURACY_BONUS_THRESHOLD = 0.8;
-const ACCURACY_BONUS = 25;
-const STREAK_BONUS_DAYS = 3;
-const STREAK_BONUS = 50;
-
-export function getRewards(): Reward[] {
-  return REWARDS;
+export interface PointsConfig {
+  SESSION_COMPLETE: number;
+  DAILY_GOAL: number;
+  SESSION_ACCURACY_BONUS: number;
+  DAILY_ACCURACY_BONUS: number;
+  STREAK_MILESTONE: number;
+  MEMORY_IMPROVEMENT: number;
+  ACCURACY_THRESHOLD: number;
+  MAX_STREAK_FREEZES: number;
 }
 
-export function loadPoints(): PointsData {
-  if (typeof window === "undefined") return { balance: 0, totalEarned: 0, sessionsCompleted: 0, redemptions: [] };
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { balance: 0, totalEarned: 0, sessionsCompleted: 0, redemptions: [] };
-    return JSON.parse(raw);
-  } catch {
-    return { balance: 0, totalEarned: 0, sessionsCompleted: 0, redemptions: [] };
-  }
+export async function getBalance(userId: string): Promise<PointsData> {
+  const res = await fetch(`/api/points?userId=${userId}&action=balance`);
+  const data = await res.json();
+  return {
+    balance: data.balance || 0,
+    total_earned: data.total_earned || 0,
+    streak_freezes: data.streak_freezes || 0,
+  };
 }
 
-function savePoints(data: PointsData) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+export async function getRewards(): Promise<{ rewards: Reward[]; config: PointsConfig }> {
+  const res = await fetch(`/api/points?action=rewards&userId=_`);
+  return res.json();
 }
 
-export function earnSessionPoints(accuracy: number): { earned: number; bonus: string[] } {
-  const data = loadPoints();
-  let earned = SESSION_POINTS;
+export async function earnPoints(
+  userId: string,
+  amount: number,
+  reason: string,
+  metadata?: Record<string, unknown>
+): Promise<{ balance: number; earned: number }> {
+  const res = await fetch("/api/points", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, action: "earn", amount, reason, metadata }),
+  });
+  return res.json();
+}
+
+export async function redeemReward(
+  userId: string,
+  rewardId: string
+): Promise<{ balance: number; redeemed?: string; error?: string }> {
+  const res = await fetch("/api/points", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, action: "redeem", rewardId }),
+  });
+  return res.json();
+}
+
+export async function resolveRedemption(
+  userId: string,
+  redemptionId: string,
+  action: "approve" | "deny"
+): Promise<{ status: string }> {
+  const res = await fetch("/api/points", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, action, redemptionId }),
+  });
+  return res.json();
+}
+
+export async function getRedemptions(
+  userId: string
+): Promise<{ id: string; reward_name: string; cost: number; status: string; requested_at: string }[]> {
+  const res = await fetch(`/api/points?userId=${userId}&action=redemptions`);
+  const data = await res.json();
+  return data.redemptions || [];
+}
+
+export async function earnSessionPoints(
+  userId: string,
+  accuracy: number
+): Promise<{ earned: number; bonuses: string[] }> {
+  let total = 0;
   const bonuses: string[] = [];
 
-  if (accuracy >= ACCURACY_BONUS_THRESHOLD) {
-    earned += ACCURACY_BONUS;
-    bonuses.push(`+${ACCURACY_BONUS} accuracy bonus (${Math.round(accuracy * 100)}%)`);
+  // Base session points
+  const base = 10;
+  total += base;
+  await earnPoints(userId, base, "session_complete");
+
+  // Accuracy bonus
+  if (accuracy >= 0.8) {
+    total += 5;
+    bonuses.push(`+5 accuracy bonus (${Math.round(accuracy * 100)}%)`);
+    await earnPoints(userId, 5, "session_accuracy", { accuracy });
   }
 
-  data.sessionsCompleted++;
-
-  if (data.sessionsCompleted % STREAK_BONUS_DAYS === 0) {
-    earned += STREAK_BONUS;
-    bonuses.push(`+${STREAK_BONUS} streak bonus (${data.sessionsCompleted} sessions!)`);
-  }
-
-  data.balance += earned;
-  data.totalEarned += earned;
-  savePoints(data);
-
-  return { earned, bonus: bonuses };
+  return { earned: total, bonuses };
 }
 
-export function requestRedemption(rewardId: string): boolean {
-  const data = loadPoints();
-  const reward = REWARDS.find((r) => r.id === rewardId);
-  if (!reward || data.balance < reward.cost) return false;
-
-  data.balance -= reward.cost;
-  data.redemptions.push({
-    id: `red_${Date.now()}`,
-    rewardId: reward.id,
-    rewardName: reward.name,
-    cost: reward.cost,
-    requestedAt: new Date().toISOString(),
-    status: "pending",
-  });
-  savePoints(data);
-  return true;
-}
-
-export function approveRedemption(redemptionId: string) {
-  const data = loadPoints();
-  const r = data.redemptions.find((x) => x.id === redemptionId);
-  if (r) {
-    r.status = "approved";
-    r.approvedAt = new Date().toISOString();
-  }
-  savePoints(data);
-}
-
-export function denyRedemption(redemptionId: string) {
-  const data = loadPoints();
-  const r = data.redemptions.find((x) => x.id === redemptionId);
-  if (r) {
-    r.status = "denied";
-    data.balance += r.cost;
-  }
-  savePoints(data);
+// Clear legacy localStorage data
+export function clearLegacyData() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("recall-points");
+  localStorage.removeItem("recall-study-stats");
 }

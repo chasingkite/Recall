@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { loadStats, StudyStats } from "../lib/study-stats";
+import { createClient } from "../lib/supabase/client";
+import LearningLadder from "./LearningLadder";
 
 const SUBJECT_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
   spanish: { bg: "bg-orange-50", text: "text-orange-700", bar: "bg-orange-500" },
@@ -14,9 +16,14 @@ const SUBJECTS = ["spanish", "biology", "english", "math"];
 
 export default function ProgressTab() {
   const [stats, setStats] = useState<StudyStats | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const supabase = createClient();
 
   useEffect(() => {
     setStats(loadStats());
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setUserId(user.id);
+    });
   }, []);
 
   const totalReviewed = stats?.totalCardsReviewed ?? 0;
@@ -83,6 +90,13 @@ export default function ProgressTab() {
         <p className="text-xs text-gray-400 text-center mt-6">
           Last studied: {new Date(stats.lastStudiedAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
         </p>
+      )}
+
+      {/* Learning Ladder (Phase 8) */}
+      {userId && (
+        <div className="mt-8">
+          <LearningLadder userId={userId} />
+        </div>
       )}
     </div>
   );

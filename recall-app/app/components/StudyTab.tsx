@@ -3,9 +3,14 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { createClient } from "../lib/supabase/client";
 import { StudyCard, MAX_SESSION_SIZE } from "../lib/sample-cards";
-import { checkAnswer, fsrsReview, actionToRating } from "../lib/spaced-repetition";
-import { recordReview, recordSessionComplete } from "../lib/study-stats";
-import { earnSessionPoints } from "../lib/points";
+import { checkAnswer, actionToRating } from "../lib/spaced-repetition";
+import { earnSessionPoints, clearLegacyData } from "../lib/points";
+import { DAILY_GOAL_CARDS } from "../lib/supabase/db-types";
+import MemoryScoreWidget from "./MemoryScoreWidget";
+import CelebrationModal from "./CelebrationModal";
+import StreakBadge from "./StreakBadge";
+import StudySheet from "./StudySheet";
+import GapAnalysisComponent from "./GapAnalysis";
 
 interface DBCard {
   id: string;
@@ -71,6 +76,10 @@ function assignVariety(cards: StudyCard[], all: StudyCard[]): StudyCard[] {
     if (rand >= 0.65 && rand < 0.75 && card.subject === "spanish") {
       return { ...card, answerType: "type" as const, front: `What is the Spanish word for: "${card.back}"?`, back: card.front };
     }
+    // ~10% chance of explain-back card
+    if (rand >= 0.90 && card.back.length > 5) {
+      return { ...card, answerType: "explain" as const, front: `Explain in your own words: ${card.front}` };
+    }
     return card;
   });
 }
@@ -82,7 +91,7 @@ const SUBJECT_COLORS: Record<string, string> = {
   math: "text-blue-400",
 };
 
-type Phase = "start" | "studying" | "celebration" | "done";
+type Phase = "start" | "sheet" | "studying" | "done";
 
 export default function StudyTab() {
   const [phase, setPhase] = useState<Phase>("start");
@@ -97,25 +106,72 @@ export default function StudyTab() {
   const [showHint, setShowHint] = useState(false);
   const [totalCards, setTotalCards] = useState(0);
   const [studyReason, setStudyReason] = useState("");
-  const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
   const [enrichField, setEnrichField] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Daily progress state
+  const [dailyCorrect, setDailyCorrect] = useState(0);
+  const [dailyGoalMet, setDailyGoalMet] = useState(false);
+  const [justMetGoal, setJustMetGoal] = useState(false);
+
+  // Session points
+  const [sessionPoints, setSessionPoints] = useState(0);
+  const [sessionBonuses, setSessionBonuses] = useState<string[]>([]);
+
+  // Re-queue: cards answered wrong get added to the end
+  const [requeuedCards, setRequeuedCards] = useState<StudyCard[]>([]);
+
+  // Memory / celebration
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationPct, setCelebrationPct] = useState(0);
+  const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
+
+  // Study sheet (Phase 7)
+  const [studySheetContent, setStudySheetContent] = useState("");
+  const [sheetLoading, setSheetLoading] = useState(false);
+
+  // Explain-back (Phase 9)
+  const [explainFeedback, setExplainFeedback] = useState<{
+    score: number; correct: string; missing: string; misconceptions: string; feedback: string; mastered: boolean;
+  } | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+
+  // Gap analysis (Phase 10)
+  const [gapAnalysis, setGapAnalysis] = useState<{
+    weakTopics: string[]; strengths: string[]; recommendations: string[]; nextSessionFocus: string[]; summary?: string;
+  } | null>(null);
+
+  // Track answers for gap analysis
+  const [sessionAnswers, setSessionAnswers] = useState<{ front: string; back: string; correct: boolean; topic: string; subject: string }[]>([]);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
-  // Load on mount
   useEffect(() => {
+    clearLegacyData();
     loadSession();
   }, []);
 
   async function loadSession() {
     setLoading(true);
     try {
+      // Get user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setUserId(user.id);
+
+      // Load daily progress
+      if (user) {
+        const progressRes = await fetch(`/api/daily-progress?userId=${user.id}`);
+        const progress = await progressRes.json();
+        setDailyCorrect(progress.cards_correct || 0);
+        setDailyGoalMet(progress.goal_met || false);
+      }
+
       const res = await fetch("/api/smart-session?studentId=81991&mode=quick5&subject=all");
       const data = await res.json();
       if (data.cards && data.cards.length > 0) {
         const studyCards = (data.cards as DBCard[]).map(dbCardToStudyCard);
-        // Use allCards pool for MC distractor generation (much larger than session)
         const allPool = data.allCards ? (data.allCards as DBCard[]).map(dbCardToStudyCard) : studyCards;
         const varied = assignVariety(studyCards, allPool);
         setCards(varied);
@@ -145,11 +201,53 @@ export default function StudyTab() {
   }
 
   function handleStart() {
-    setPhase("studying");
+    // Load study sheet first (Phase 7)
+    setSheetLoading(true);
+    setPhase("sheet");
     setCurrentIndex(0);
     setCorrectCount(0);
+    setRequeuedCards([]);
     setAnswered(false);
+    setJustMetGoal(false);
+    setShowCelebration(false);
+    setGapAnalysis(null);
+    setSessionAnswers([]);
+    setExplainFeedback(null);
+
+    const topics = [...new Set(cards.map((c) => c.topic).filter(Boolean))];
+    const fronts = cards.map((c) => c.front);
+
+    fetch("/api/study-sheet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topics, cardFronts: fronts }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        setStudySheetContent(data.sheet || "");
+        setSheetLoading(false);
+      })
+      .catch(() => {
+        setStudySheetContent("");
+        setSheetLoading(false);
+      });
+  }
+
+  function handleStartQuiz() {
+    setPhase("studying");
     setTimeout(() => inputRef.current?.focus(), 100);
+  }
+
+  async function recordFSRS(cardId: string, correct: boolean, hintWasUsed: boolean, gaveUp: boolean) {
+    if (!userId) return;
+    const rating = actionToRating(correct, hintWasUsed, gaveUp);
+    try {
+      await fetch("/api/card-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, cardId, rating }),
+      });
+    } catch {}
   }
 
   function handleAnswer(answer: string) {
@@ -159,12 +257,16 @@ export default function StudyTab() {
     const result = checkAnswer(answer, card.back);
     setIsCorrect(result.correct);
     setIsClose(result.close);
-    if (result.correct) setCorrectCount((c) => c + 1);
+    if (result.correct) {
+      setCorrectCount((c) => c + 1);
+    } else {
+      setRequeuedCards((prev) => [...prev, card]);
+    }
     setAnswered(true);
     setEnrichField(Math.floor(Math.random() * 3));
-    // Record in FSRS
-    const rating = actionToRating(result.correct, hintUsed, false);
-    recordReview(card.subject, result.correct, rating >= 3 ? 1 : 0);
+    recordFSRS(card.id, result.correct, hintUsed, false);
+    recordTopicLevel(card.topic, result.correct);
+    setSessionAnswers((prev) => [...prev, { front: card.front, back: card.back, correct: result.correct, topic: card.topic || "", subject: card.subject }]);
   }
 
   function handleMC(choice: string) {
@@ -174,10 +276,16 @@ export default function StudyTab() {
     const correct = choice === card.back;
     setIsCorrect(correct);
     setIsClose(false);
-    if (correct) setCorrectCount((c) => c + 1);
+    if (correct) {
+      setCorrectCount((c) => c + 1);
+    } else {
+      setRequeuedCards((prev) => [...prev, card]);
+    }
     setAnswered(true);
     setEnrichField(Math.floor(Math.random() * 3));
-    recordReview(card.subject, correct, correct ? 1 : 0);
+    recordFSRS(card.id, correct, false, false);
+    recordTopicLevel(card.topic, correct);
+    setSessionAnswers((prev) => [...prev, { front: card.front, back: card.back, correct, topic: card.topic || "", subject: card.subject }]);
   }
 
   function handleTF(answer: boolean) {
@@ -186,42 +294,84 @@ export default function StudyTab() {
     const correct = answer === card.trueFalseAnswer;
     setUserAnswer(answer ? "True" : "False");
     setIsCorrect(correct);
-    if (correct) setCorrectCount((c) => c + 1);
+    if (correct) {
+      setCorrectCount((c) => c + 1);
+    } else {
+      setRequeuedCards((prev) => [...prev, card]);
+    }
     setAnswered(true);
     setEnrichField(Math.floor(Math.random() * 3));
-    recordReview(card.subject, correct, correct ? 1 : 0);
+    recordFSRS(card.id, correct, false, false);
+    recordTopicLevel(card.topic, correct);
+    setSessionAnswers((prev) => [...prev, { front: card.front, back: card.back, correct, topic: card.topic || "", subject: card.subject }]);
+  }
+
+  async function handleExplain(explanation: string) {
+    const card = cards[currentIndex];
+    if (!card) return;
+    setUserAnswer(explanation);
+    setExplainLoading(true);
+    setExplainFeedback(null);
+
+    try {
+      const res = await fetch("/api/score-explanation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          concept: card.front,
+          correctAnswer: card.back,
+          studentExplanation: explanation,
+          topic: card.topic || card.subject,
+        }),
+      });
+      const data = await res.json();
+      setExplainFeedback(data);
+      const mastered = data.mastered;
+      setIsCorrect(mastered);
+      if (mastered) {
+        setCorrectCount((c) => c + 1);
+      } else {
+        setRequeuedCards((prev) => [...prev, card]);
+      }
+      recordFSRS(card.id, mastered, false, false);
+      recordTopicLevel(card.topic, mastered);
+      setSessionAnswers((prev) => [...prev, { front: card.front, back: card.back, correct: mastered, topic: card.topic || "", subject: card.subject }]);
+    } catch {
+      setExplainFeedback({ score: 0, correct: "", missing: "", misconceptions: "", feedback: "Could not score your explanation. Try again.", mastered: false });
+      setIsCorrect(false);
+      setRequeuedCards((prev) => [...prev, card]);
+    }
+    setExplainLoading(false);
+    setAnswered(true);
   }
 
   function handleSkip() {
+    const card = cards[currentIndex];
     setUserAnswer("");
     setIsCorrect(false);
     setAnswered(true);
     setEnrichField(Math.floor(Math.random() * 3));
-    const card = cards[currentIndex];
-    if (card) recordReview(card.subject, false, 0);
+    if (card) {
+      setRequeuedCards((prev) => [...prev, card]);
+      recordFSRS(card.id, false, false, true);
+      recordTopicLevel(card.topic, false);
+      setSessionAnswers((prev) => [...prev, { front: card.front, back: card.back, correct: false, topic: card.topic || "", subject: card.subject }]);
+    }
   }
 
-  function handleNext() {
+  function recordTopicLevel(topic: string | undefined, correct: boolean) {
+    if (!userId || !topic) return;
+    fetch("/api/topic-levels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, topic, correct }),
+    }).catch(() => {});
+  }
+
+  async function handleNext() {
     if (currentIndex + 1 >= cards.length) {
-      recordSessionComplete();
-      const result = earnSessionPoints(cards.length > 0 ? correctCount / cards.length : 0);
-      setStreak(result.earned);
-
-      // Save session to Supabase for admin tracking
-      const topics = [...new Set(cards.map((c) => c.topic).filter(Boolean))] as string[];
-      const subjects = [...new Set(cards.map((c) => c.subject).filter(Boolean))] as string[];
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (user) {
-          supabase.from("study_sessions").insert({
-            user_id: user.id,
-            cards_reviewed: cards.length,
-            cards_correct: correctCount + (isCorrect ? 1 : 0),
-            topics,
-            subjects,
-          }).then(() => {});
-        }
-      });
-
+      // Session complete — save progress
+      await saveSessionProgress();
       setPhase("done");
     } else {
       setCurrentIndex((i) => i + 1);
@@ -233,18 +383,102 @@ export default function StudyTab() {
     }
   }
 
+  async function saveSessionProgress() {
+    if (!userId) return;
+
+    const accuracy = cards.length > 0 ? correctCount / cards.length : 0;
+
+    // Save to daily progress
+    try {
+      const res = await fetch("/api/daily-progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          cardsReviewed: cards.length,
+          cardsCorrect: correctCount,
+        }),
+      });
+      const progress = await res.json();
+      setDailyCorrect(progress.cards_correct || 0);
+      setDailyGoalMet(progress.goal_met || false);
+      if (progress.just_met_goal) setJustMetGoal(true);
+    } catch {}
+
+    // Earn session points
+    try {
+      const result = await earnSessionPoints(userId, accuracy);
+      setSessionPoints(result.earned);
+      setSessionBonuses(result.bonuses);
+    } catch {}
+
+    // Save study session to Supabase
+    const topics = [...new Set(cards.map((c) => c.topic).filter(Boolean))] as string[];
+    const subjects = [...new Set(cards.map((c) => c.subject).filter(Boolean))] as string[];
+    try {
+      await supabase.from("study_sessions").insert({
+        user_id: userId,
+        cards_reviewed: cards.length,
+        cards_correct: correctCount,
+        topics,
+        subjects,
+      });
+    } catch {}
+
+    // Check memory score for celebration
+    try {
+      const memRes = await fetch(`/api/card-review?userId=${userId}`);
+      const memData = await memRes.json();
+      if (memData.improvement_pct >= 20) {
+        setCelebrationPct(memData.improvement_pct);
+        setShowCelebration(true);
+      }
+      setMemoryRefreshKey((k) => k + 1);
+    } catch {}
+
+    // Run gap analysis (Phase 10)
+    if (sessionAnswers.length > 0) {
+      try {
+        const gapRes = await fetch("/api/gap-analysis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionCards: sessionAnswers, userId }),
+        });
+        const gapData = await gapRes.json();
+        setGapAnalysis(gapData);
+      } catch {}
+    }
+  }
+
   async function handleMore() {
+    // If there are re-queued wrong cards, study those first
+    if (requeuedCards.length > 0) {
+      setCards(requeuedCards);
+      setRequeuedCards([]);
+      setPhase("studying");
+      setCurrentIndex(0);
+      setCorrectCount(0);
+      setAnswered(false);
+      setHintUsed(false);
+      setShowHint(false);
+      setJustMetGoal(false);
+      setTimeout(() => inputRef.current?.focus(), 100);
+      return;
+    }
+
     setPhase("start");
     setCurrentIndex(0);
     setCorrectCount(0);
     setAnswered(false);
     setHintUsed(false);
     setShowHint(false);
+    setJustMetGoal(false);
     await loadSession();
   }
 
   const card = cards[currentIndex];
   const accuracy = cards.length > 0 ? Math.round((correctCount / Math.max(1, currentIndex + (answered ? 1 : 0))) * 100) : 0;
+  const cardsRemaining = DAILY_GOAL_CARDS - dailyCorrect;
 
   // Loading
   if (loading) {
@@ -255,16 +489,57 @@ export default function StudyTab() {
     );
   }
 
+  // STUDY SHEET PHASE (Phase 7)
+  if (phase === "sheet") {
+    return <StudySheet sheet={studySheetContent} onStartQuiz={handleStartQuiz} loading={sheetLoading} />;
+  }
+
   // START SCREEN
   if (phase === "start") {
+    const progressPct = Math.min(100, Math.round((dailyCorrect / DAILY_GOAL_CARDS) * 100));
+    const progressColor = dailyGoalMet ? "bg-amber-400" : progressPct >= 75 ? "bg-green-500" : progressPct >= 50 ? "bg-yellow-500" : "bg-blue-500";
+
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center px-6 text-center">
-        <div className="text-5xl mb-6">🪁</div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Ready to study?</h1>
+        {/* Streak Badge */}
+        {userId && (
+          <div className="mb-4">
+            <StreakBadge userId={userId} />
+          </div>
+        )}
+
+        {/* Memory Score */}
+        {userId && <MemoryScoreWidget key={memoryRefreshKey} userId={userId} />}
+
+        {/* Daily Goal Progress */}
+        <div className="w-full max-w-xs mb-6">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-medium text-gray-500">Daily Goal</span>
+            <span className={`text-xs font-bold ${dailyGoalMet ? "text-amber-600" : "text-gray-700"}`}>
+              {dailyCorrect} / {DAILY_GOAL_CARDS} mastered
+            </span>
+          </div>
+          <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          {dailyGoalMet ? (
+            <p className="text-xs text-amber-600 mt-1.5 font-medium">Goal complete! Keep going for bonus points.</p>
+          ) : (
+            <p className="text-xs text-gray-400 mt-1.5">{cardsRemaining} more correct answers to hit your goal</p>
+          )}
+        </div>
+
+        <div className="text-5xl mb-6">{dailyGoalMet ? "🏆" : "🪁"}</div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          {dailyGoalMet ? "Goal reached! Study more?" : "Ready to study?"}
+        </h1>
         {studyReason && (
           <p className="text-sm text-blue-600 mb-1">📋 {studyReason} — due soon</p>
         )}
-        <p className="text-sm text-gray-500 mb-8">{totalCards} cards waiting · 5 cards, ~2 minutes</p>
+        <p className="text-sm text-gray-500 mb-8">{totalCards} cards available · 5 cards per session</p>
         <button
           onClick={handleStart}
           className="w-full max-w-xs py-4 rounded-2xl bg-blue-600 text-white text-lg font-bold hover:bg-blue-700 active:scale-95 transition-all shadow-lg"
@@ -281,17 +556,91 @@ export default function StudyTab() {
   // DONE SCREEN
   if (phase === "done") {
     const pct = cards.length > 0 ? Math.round((correctCount / cards.length) * 100) : 0;
+    const progressPct = Math.min(100, Math.round((dailyCorrect / DAILY_GOAL_CARDS) * 100));
+    const progressColor = dailyGoalMet ? "bg-amber-400" : progressPct >= 75 ? "bg-green-500" : progressPct >= 50 ? "bg-yellow-500" : "bg-blue-500";
+
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center px-6 text-center">
+        {/* Celebration Modal */}
+        {showCelebration && (
+          <CelebrationModal
+            improvementPct={celebrationPct}
+            onClose={() => setShowCelebration(false)}
+          />
+        )}
+
+        {/* Streak Badge */}
+        {userId && (
+          <div className="mb-3">
+            <StreakBadge userId={userId} />
+          </div>
+        )}
+
+        {/* Goal just met celebration */}
+        {justMetGoal && (
+          <div className="w-full max-w-xs mb-4 p-3 rounded-2xl bg-amber-50 border-2 border-amber-300">
+            <p className="text-lg font-bold text-amber-700">🎯 Daily Goal Complete!</p>
+            <p className="text-xs text-amber-600 mt-1">+50 pts earned for hitting your goal</p>
+          </div>
+        )}
+
         <div className="text-6xl mb-4">{pct >= 80 ? "🎉" : pct >= 50 ? "👍" : "💪"}</div>
         <h1 className="text-2xl font-bold text-gray-900 mb-1">{correctCount}/{cards.length} correct</h1>
         <p className="text-3xl font-bold text-blue-600 mb-2">{pct}%</p>
-        <p className="text-sm text-amber-600 mb-6">⭐ +{streak} pts earned</p>
+
+        {/* Points earned */}
+        <p className="text-sm text-amber-600 mb-2">⭐ +{sessionPoints} pts earned</p>
+        {sessionBonuses.map((b, i) => (
+          <p key={i} className="text-xs text-amber-500">{b}</p>
+        ))}
+
+        {/* Memory Score */}
+        {userId && <MemoryScoreWidget key={memoryRefreshKey} userId={userId} />}
+
+        {/* Daily progress bar */}
+        <div className="w-full max-w-xs mt-4 mb-6">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-gray-500">Daily Goal</span>
+            <span className={`text-xs font-bold ${dailyGoalMet ? "text-amber-600" : "text-gray-700"}`}>
+              {dailyCorrect} / {DAILY_GOAL_CARDS}
+            </span>
+          </div>
+          <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          {!dailyGoalMet && (
+            <p className="text-xs text-gray-400 mt-1">{DAILY_GOAL_CARDS - dailyCorrect} more to go!</p>
+          )}
+        </div>
+
+        {/* Gap Analysis (Phase 10) */}
+        {gapAnalysis && (
+          <GapAnalysisComponent
+            weakTopics={gapAnalysis.weakTopics}
+            strengths={gapAnalysis.strengths}
+            recommendations={gapAnalysis.recommendations}
+            nextSessionFocus={gapAnalysis.nextSessionFocus}
+            summary={gapAnalysis.summary}
+          />
+        )}
+
+        {/* Re-queue info */}
+        {requeuedCards.length > 0 && (
+          <p className="text-xs text-red-500 mb-3">
+            {requeuedCards.length} card{requeuedCards.length > 1 ? "s" : ""} to retry (wrong answers)
+          </p>
+        )}
+
         <button
           onClick={handleMore}
           className="w-full max-w-xs py-4 rounded-2xl bg-blue-600 text-white text-lg font-bold hover:bg-blue-700 active:scale-95 transition-all shadow-lg mb-3"
         >
-          Do 5 more
+          {requeuedCards.length > 0
+            ? `Retry ${requeuedCards.length} missed card${requeuedCards.length > 1 ? "s" : ""}`
+            : "Do 5 more"}
         </button>
         <button
           onClick={() => setPhase("start")}
@@ -303,7 +652,7 @@ export default function StudyTab() {
     );
   }
 
-  // STUDYING — full screen card experience
+  // STUDYING
   if (!card) return null;
 
   const enrichments = [
@@ -417,6 +766,35 @@ export default function StudyTab() {
                   </div>
                 </>
               )}
+
+              {/* Explain-back (Phase 9) */}
+              {card.answerType === "explain" && (
+                <>
+                  <p className="text-xs text-indigo-500 text-center mb-2">Explain in your own words — AI will score your answer</p>
+                  <textarea
+                    value={userAnswer}
+                    onChange={(e) => setUserAnswer(e.target.value)}
+                    placeholder="Type your explanation here..."
+                    rows={4}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none resize-none"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => userAnswer.trim().length >= 10 && handleExplain(userAnswer)}
+                    disabled={userAnswer.trim().length < 10 || explainLoading}
+                    className="w-full mt-2 py-3.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-30 active:scale-95 transition-all"
+                  >
+                    {explainLoading ? "Scoring..." : "Submit Explanation"}
+                  </button>
+                  <p className="text-xs text-gray-400 text-center mt-1">Minimum 10 characters</p>
+                  <button
+                    onClick={handleSkip}
+                    className="w-full mt-2 py-2 rounded-xl text-xs text-gray-400 hover:bg-gray-50 transition-colors"
+                  >
+                    🤷 I don&apos;t know
+                  </button>
+                </>
+              )}
             </div>
           </>
         ) : (
@@ -428,14 +806,50 @@ export default function StudyTab() {
             </div>
 
             <p className={`text-sm font-medium mb-2 ${isCorrect ? "text-green-600" : "text-red-600"}`}>
-              {isCorrect ? (isClose ? "Close enough!" : "Correct!") : "Not quite"}
+              {isCorrect ? (isClose ? "Close enough!" : "Correct!") : "Not quite — this card will come back"}
             </p>
 
             {/* Correct answer */}
             <p className="text-xl font-bold text-gray-900 text-center mb-4">{card.back}</p>
 
-            {/* Always show explanation */}
-            {card.explanation && (
+            {/* Explain-back feedback (Phase 9) */}
+            {explainFeedback && card.answerType === "explain" && (
+              <div className="w-full max-w-sm space-y-2 mb-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <span className="text-xs font-medium text-gray-500">Score:</span>
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <div key={s} className={`w-5 h-2 rounded-full ${s <= explainFeedback.score ? "bg-indigo-500" : "bg-gray-200"}`} />
+                    ))}
+                  </div>
+                  <span className="text-xs text-gray-500">{explainFeedback.score}/5</span>
+                </div>
+                {explainFeedback.correct && (
+                  <div className="rounded-xl bg-green-50 p-3">
+                    <p className="text-xs text-green-600 font-medium mb-0.5">What you got right</p>
+                    <p className="text-xs text-green-700">{explainFeedback.correct}</p>
+                  </div>
+                )}
+                {explainFeedback.missing && (
+                  <div className="rounded-xl bg-amber-50 p-3">
+                    <p className="text-xs text-amber-600 font-medium mb-0.5">What was missing</p>
+                    <p className="text-xs text-amber-700">{explainFeedback.missing}</p>
+                  </div>
+                )}
+                {explainFeedback.misconceptions && (
+                  <div className="rounded-xl bg-red-50 p-3">
+                    <p className="text-xs text-red-600 font-medium mb-0.5">Misconceptions</p>
+                    <p className="text-xs text-red-700">{explainFeedback.misconceptions}</p>
+                  </div>
+                )}
+                {explainFeedback.feedback && (
+                  <p className="text-sm text-indigo-600 text-center italic">{explainFeedback.feedback}</p>
+                )}
+              </div>
+            )}
+
+            {/* Always show explanation (non-explain cards) */}
+            {card.explanation && card.answerType !== "explain" && (
               <div className={`w-full max-w-sm rounded-xl p-3 mb-3 ${isCorrect ? "bg-blue-50" : "bg-red-50"}`}>
                 <p className={`text-xs ${isCorrect ? "text-blue-700" : "text-red-700"}`}>{card.explanation}</p>
               </div>

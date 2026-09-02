@@ -101,17 +101,15 @@ export default function AdminDashboard() {
       const totalCorrect = allSessions.reduce((s: number, r: any) => s + (r.cards_correct || 0), 0);
       const accuracy = totalCardsReviewed > 0 ? Math.round((totalCorrect / totalCardsReviewed) * 100) : 0;
 
-      // Calculate streak (consecutive days with sessions)
+      // Calculate streak from streaks table
       let streak = 0;
-      if (allSessions.length > 0) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const sessionDays = new Set(allSessions.map((s: any) => new Date(s.created_at).toDateString()));
-        let checkDate = new Date(today);
-        while (sessionDays.has(checkDate.toDateString())) {
-          streak++;
-          checkDate.setDate(checkDate.getDate() - 1);
-        }
+      const { data: streakData } = await supabase
+        .from("streaks")
+        .select("current_streak, longest_streak")
+        .eq("user_id", profile.id)
+        .single();
+      if (streakData) {
+        streak = streakData.current_streak;
       }
 
       // This week cards

@@ -1,4 +1,4 @@
-export type AnswerType = "type" | "fill-blank" | "true-false" | "multiple-choice";
+export type AnswerType = "type" | "fill-blank" | "true-false" | "multiple-choice" | "explain";
 
 export interface StudyCard {
   id: string;

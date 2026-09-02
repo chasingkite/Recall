@@ -1,23 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { earnSessionPoints } from "../../lib/points";
+import { useState } from "react";
 
 interface SessionCompleteProps {
   total: number;
   correctCount: number;
   onRestart: () => void;
+  pointsEarned?: number;
+  bonuses?: string[];
 }
 
-export default function SessionComplete({ total, correctCount, onRestart }: SessionCompleteProps) {
+export default function SessionComplete({ total, correctCount, onRestart, pointsEarned, bonuses }: SessionCompleteProps) {
   const accuracy = total > 0 ? correctCount / total : 0;
   const accuracyPct = Math.round(accuracy * 100);
-  const [pointsResult, setPointsResult] = useState<{ earned: number; bonus: string[] } | null>(null);
-
-  useEffect(() => {
-    const result = earnSessionPoints(accuracy);
-    setPointsResult(result);
-  }, [accuracy]);
 
   return (
     <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -39,15 +34,14 @@ export default function SessionComplete({ total, correctCount, onRestart }: Sess
         </div>
       </div>
 
-      {/* Points earned */}
-      {pointsResult && (
+      {pointsEarned !== undefined && pointsEarned > 0 && (
         <div className="w-full max-w-xs bg-amber-50 border border-amber-200 rounded-xl p-4 my-4">
           <div className="flex items-center justify-center gap-2 mb-2">
             <span className="text-2xl">⭐</span>
-            <span className="text-xl font-bold text-amber-700">+{pointsResult.earned} pts</span>
+            <span className="text-xl font-bold text-amber-700">+{pointsEarned} pts</span>
           </div>
-          <p className="text-xs text-amber-600">50 pts for completing session</p>
-          {pointsResult.bonus.map((b, i) => (
+          <p className="text-xs text-amber-600">10 pts for completing session</p>
+          {bonuses?.map((b, i) => (
             <p key={i} className="text-xs text-amber-700 font-medium">{b}</p>
           ))}
         </div>
