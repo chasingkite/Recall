@@ -206,6 +206,22 @@ export default function StudyTab() {
       recordSessionComplete();
       const result = earnSessionPoints(cards.length > 0 ? correctCount / cards.length : 0);
       setStreak(result.earned);
+
+      // Save session to Supabase for admin tracking
+      const topics = [...new Set(cards.map((c) => c.topic).filter(Boolean))] as string[];
+      const subjects = [...new Set(cards.map((c) => c.subject).filter(Boolean))] as string[];
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) {
+          supabase.from("study_sessions").insert({
+            user_id: user.id,
+            cards_reviewed: cards.length,
+            cards_correct: correctCount + (isCorrect ? 1 : 0),
+            topics,
+            subjects,
+          }).then(() => {});
+        }
+      });
+
       setPhase("done");
     } else {
       setCurrentIndex((i) => i + 1);
