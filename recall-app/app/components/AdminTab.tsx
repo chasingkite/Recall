@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 import ImportDeck from "./ImportDeck";
 import CardAuditor from "./CardAuditor";
+import ImageToCards from "./ImageToCards";
 
 interface Profile {
   id: string;
@@ -70,6 +71,7 @@ export default function AdminTab() {
 
   const [showImport, setShowImport] = useState(false);
   const [showAuditor, setShowAuditor] = useState(false);
+  const [showImageToCards, setShowImageToCards] = useState(false);
 
   if (loading) {
     return <div className="flex justify-center py-12"><div className="animate-spin h-6 w-6 border-4 border-blue-500 border-t-transparent rounded-full" /></div>;
@@ -80,6 +82,15 @@ export default function AdminTab() {
       <div className="w-full">
         <button onClick={() => setShowImport(false)} className="text-xs text-blue-600 mb-4 hover:text-blue-800">&larr; Back to Admin</button>
         <ImportDeck />
+      </div>
+    );
+  }
+
+  if (showImageToCards) {
+    return (
+      <div className="w-full">
+        <button onClick={() => setShowImageToCards(false)} className="text-xs text-blue-600 mb-4 hover:text-blue-800">&larr; Back to Admin</button>
+        <ImageToCards />
       </div>
     );
   }
@@ -103,6 +114,14 @@ export default function AdminTab() {
         className="w-full mb-3 py-3 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
       >
         + Import Deck (CSV / Anki)
+      </button>
+
+      {/* Image to Cards Button */}
+      <button
+        onClick={() => setShowImageToCards(true)}
+        className="w-full mb-3 py-3 rounded-xl border-2 border-dashed border-green-300 bg-green-50 text-green-700 text-sm font-medium hover:bg-green-100 transition-colors"
+      >
+        📸 Create Cards from Photo
       </button>
 
       {/* Card Auditor Button */}
