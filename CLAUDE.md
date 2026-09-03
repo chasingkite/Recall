@@ -107,12 +107,32 @@ Key tables:
 
 - **SPA with tab navigation**: Single `page.tsx` renders all tabs client-side. No Next.js routing beyond login/auth.
 - **Admin vs Student views**: Role-based. Admin sees AdminDashboard + AdminTab. Students see DashboardTab + StudyTab + ProgressTab + RewardsTab.
-- **Study flow**: Start → optional study sheet → card quiz (6 answer types) → FSRS update → wrong card re-queue → done screen with gap analysis
-- **Smart sessions**: FSRS-aware card selection prioritized by Canvas upcoming assignments
-- **Card import**: CSV/image → preview → AI enrich (batches of 3) → dedup → save. Subject must be selected (no default).
-- **Audit pipeline**: Rule-based scan + AI fix (individual or batch Fix All)
-- **Points economy**: Earn from sessions/accuracy/streaks → spend on rewards → parent approval gate
-- **Learning ladder**: Per-topic L1-L5 progression, level up at ≥80% accuracy on 10+ cards
+- **Study flow**: Start → card quiz (6 answer types incl. explain-back) → FSRS update → wrong card re-queue → done screen with gap analysis. Study sheet loads in background, available via collapsible "Notes" button during quiz.
+- **Smart sessions**: FSRS-aware card selection prioritized by Canvas upcoming assignments. Claude topic matching cached daily.
+- **Dashboard (student)**: iOS-native style (white cards on #f2f2f7 bg, shadow-only, no borders). Shows: needs attention (overdue), upcoming tests (auto-detect + manual add), due this week, grades (3-col grid), daily goal. All assignments have "Done" button to dismiss (persisted in canvas_cache). Overdue capped at 14 days.
+- **Answer checking**: Fuzzy matching — strips filler words (the, a, an, is...), word-order tolerance (80% word overlap), Levenshtein ≤2 after stripping.
+- **Card import**: CSV/image → preview → AI enrich (batches of 3) → dedup → save.
+- **Points economy**: Earn from sessions (10)/daily goal (50)/accuracy/streaks/memory improvement → spend on rewards → parent approval gate. All server-side via SUPABASE_SERVICE_ROLE_KEY.
+- **Learning ladder**: Per-topic L1-L5 progression, level up at ≥80% accuracy on 10+ cards.
+- **Session save guard**: `savingRef` prevents duplicate API calls on session complete. `sessionAnswers` array is source of truth for counts (not React state).
+
+## Testing
+
+```bash
+cd recall-app
+node --experimental-strip-types test-unit.ts    # 86 pure logic tests (FSRS, answer checking, accumulation, save guard)
+node test-integration.mjs                        # 41 API integration tests (creates/cleans test user automatically)
+node_modules/.bin/tsc --noEmit                   # TypeScript type check
+```
+
+Always run all three before committing.
+
+## Design System
+
+- **iOS native style**: white cards on `#f2f2f7` background, `rounded-[12px]`, `shadow-[0_1px_3px_rgba(0,0,0,0.08)]`, no visible borders
+- **System colors**: `#007aff` (blue/links), `#34c759` (green/done), `#ff9500` (orange/warning), `#5856d6` (purple/tests)
+- **Typography**: `text-[15px]` body, `text-[13px]` secondary, `text-[11px]` tertiary, `font-bold` for numbers
+- **Interactions**: `active:opacity-50` for taps (not scale transforms)
 
 ## Card Design Rules
 
