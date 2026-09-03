@@ -2,7 +2,7 @@
 
 ## Mission
 
-A spaced repetition study app for Hailey (9th grade) and Connor that uses scientifically-proven cognitive learning mechanics to build long-term memory retention across Spanish, Biology, English, Math, and PE.
+A spaced repetition study app for the whole family — admin (Hien) studies English and French, students (Hailey, Connor) study their own subjects. Uses scientifically-proven cognitive learning mechanics to build long-term memory retention.
 
 ## Tech Stack
 
@@ -10,14 +10,14 @@ A spaced repetition study app for Hailey (9th grade) and Connor that uses scient
 - **Database & Auth**: Supabase (PostgreSQL + Google OAuth)
 - **Spaced Repetition**: FSRS v5 algorithm (per-card stability/difficulty/retrievability)
 - **AI**: Claude Haiku (`claude-haiku-4-5-20251001`) for enrichment, scoring, study sheets, gap analysis, audit fixes
-- **Canvas LMS**: Grade syncing and assignment tracking (student ID 81991)
+- **Canvas LMS**: Grade syncing and assignment tracking (per-user via `profiles.canvas_student_id`)
 - **Hosting**: Vercel (chasingkite.com)
 - **Package manager**: yarn 1.x
 
 ## Users
 
-- **Admin (hnguyen417@gmail.com)**: Manages users, imports decks, views all student progress
-- **Hailey (haileyoliviatran@gmail.com)**: Student, Canvas linked (ID: 81991), all subjects
+- **Admin (hnguyen417@gmail.com)**: Manages users, imports decks, views all student progress. Also studies English + French (no Canvas).
+- **Hailey (haileyoliviatran@gmail.com)**: Student, Canvas linked (ID: 81991), Spanish + Biology + English + Math + PE
 - **Connor (connorarestran@gmail.com)**: Student, no Canvas, English + Math
 
 ## Project Structure
@@ -75,7 +75,7 @@ app/
 ## Architecture
 
 ### SPA with Tab Navigation
-Single `page.tsx` renders all tabs client-side. Admin sees Dashboard + Study + Progress + Admin. Students see Dashboard + Study + Progress + Rewards. Default tab: Dashboard for Canvas-linked/admin users, Study for others.
+Single `page.tsx` renders all tabs client-side. Admin sees Dashboard + Study + Progress + Admin. Students see Dashboard + Study + Progress + Rewards. Default tab: Dashboard for Canvas-linked/admin users, Study for others. All tabs use the logged-in user's UUID — subjects, FSRS state, and Canvas integration are per-user (Canvas only activates for users with `canvas_student_id` in profiles).
 
 ### Study Flow
 1. **Start screen**: Streak badge, memory score widget, daily goal progress (20 cards)
@@ -109,7 +109,7 @@ Per-topic L1-L5 progression (Beginner → Expert). Level up at ≥80% accuracy o
 ### Canvas Integration
 - Grades and assignments fetched via parent observer token
 - Cached in Supabase `canvas_cache` (1-hour TTL)
-- Smart session prioritizes cards matching upcoming Canvas assignments
+- Smart session prioritizes cards matching upcoming Canvas assignments (Canvas-linked users only; non-Canvas users get pure FSRS scheduling)
 
 ## Database (Supabase)
 

@@ -1,6 +1,6 @@
 # Recall
 
-Spaced repetition study app for high school students (Hailey, Connor). Built with Next.js 16, React 19, Supabase, and the FSRS algorithm.
+Spaced repetition study app for the family — admin (Hien) studies English/French, students (Hailey, Connor) study their own subjects. Built with Next.js 16, React 19, Supabase, and the FSRS algorithm.
 
 ## Quick Start
 
@@ -75,7 +75,7 @@ recall-app/
 - **Supabase**: PostgreSQL + Google OAuth + RLS
 - **FSRS v5**: Per-card stability, difficulty, retrievability tracking
 - **Claude Haiku** (`claude-haiku-4-5-20251001`): Enrichment, scoring, study sheets, gap analysis, audit fixes, image-to-cards
-- **Canvas LMS API**: Grade syncing and assignment tracking (student ID 81991)
+- **Canvas LMS API**: Grade syncing and assignment tracking (per-user via `profiles.canvas_student_id`)
 - **Package manager**: yarn 1.x (`.npmrc` overrides registry to public npm)
 
 ## Key Env Vars (in .env.local)
@@ -106,9 +106,10 @@ Key tables:
 ## Architecture Notes
 
 - **SPA with tab navigation**: Single `page.tsx` renders all tabs client-side. No Next.js routing beyond login/auth.
-- **Admin vs Student views**: Role-based. Admin sees AdminDashboard + AdminTab. Students see DashboardTab + StudyTab + ProgressTab + RewardsTab.
+- **Per-user data**: All tabs (Study, Progress, Dashboard) use the logged-in user's UUID. Canvas integration only activates for users with `canvas_student_id` set in profiles. Admin users without Canvas get FSRS-only card selection. Subjects shown in Progress tab are pulled from `profiles.subjects[]`, not hardcoded.
+- **Admin vs Student views**: Role-based. Admin sees AdminDashboard + AdminTab + StudyTab + ProgressTab. Students see DashboardTab + StudyTab + ProgressTab + RewardsTab.
 - **Study flow**: Start → card quiz (6 answer types incl. explain-back) → FSRS update → wrong card re-queue → done screen with gap analysis. Study sheet loads in background, available via collapsible "Notes" button during quiz.
-- **Smart sessions**: FSRS-aware card selection prioritized by Canvas upcoming assignments. Claude topic matching cached daily.
+- **Smart sessions**: FSRS-aware card selection. For Canvas-linked users, prioritized by upcoming assignments with Claude topic matching (cached daily). For non-Canvas users, pure FSRS scheduling.
 - **Dashboard (student)**: iOS-native style (white cards on #f2f2f7 bg, shadow-only, no borders). Shows: needs attention (overdue), upcoming tests (auto-detect + manual add), due this week, grades (3-col grid), daily goal. All assignments have "Done" button to dismiss (persisted in canvas_cache). Overdue capped at 14 days.
 - **Answer checking**: Fuzzy matching — strips filler words (the, a, an, is...), word-order tolerance (80% word overlap), Levenshtein ≤2 after stripping.
 - **Card import**: CSV/image → preview → AI enrich (batches of 3) → dedup → save.
