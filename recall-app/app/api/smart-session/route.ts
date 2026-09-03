@@ -16,15 +16,17 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // Look up the user's Canvas student ID from their profile
+  // Look up the user's Canvas student ID and subjects from their profile
   let canvasStudentId: string | null = null;
+  let userSubjects: string[] = [];
   if (userId) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("canvas_student_id")
+      .select("canvas_student_id, subjects")
       .eq("id", userId)
       .single();
     canvasStudentId = profile?.canvas_student_id || null;
+    userSubjects = profile?.subjects || [];
   }
 
   // 1. Get upcoming assignments from Canvas cache (only if user has Canvas)
@@ -49,10 +51,14 @@ export async function GET(request: Request) {
     }
   }
 
-  // 2. Get all cards with topics
-  let cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, decks(subject)").order("created_at");
+  // 2. Get cards — filtered by user's subjects when subject=all
+  let cardQuery;
   if (subject !== "all") {
     cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, decks!inner(subject)").eq("decks.subject", subject).order("created_at");
+  } else if (userSubjects.length > 0) {
+    cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, decks!inner(subject)").in("decks.subject", userSubjects).order("created_at");
+  } else {
+    cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, decks(subject)").order("created_at");
   }
   const { data: cards } = await cardQuery;
   if (!cards || cards.length === 0) {
