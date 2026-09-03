@@ -56,6 +56,12 @@ recall-app/
 │   │   ├── audit-fix/        # AI-suggested card fixes
 │   │   ├── audit-correctness/ # AI fact-checking for imported cards
 │   │   ├── assign-topics/    # AI topic categorization
+│   │   ├── push/subscribe/   # Save/delete Web Push subscriptions
+│   │   ├── push/send/        # Send push notifications via web-push
+│   │   ├── cron/daily-reminder/ # Vercel Cron — study reminders
+│   │   ├── cron/canvas-sync/    # GitHub Actions — pre-cache Canvas data
+│   │   ├── cron/topic-match/    # GitHub Actions — AI assignment→topic matching
+│   │   ├── cron/assign-topics/  # GitHub Actions — auto-tag untopiced cards
 │   │   ├── canvas/           # Direct Canvas API proxy
 │   │   ├── canvas-sync/      # Cached Canvas data (1-hour TTL)
 │   │   └── seed/             # DB seeding endpoint
@@ -63,11 +69,25 @@ recall-app/
 │       ├── spaced-repetition.ts # FSRS + answer checking (Levenshtein, normalization)
 │       ├── sample-cards.ts      # StudyCard type + sample data (MAX_SESSION_SIZE = 20)
 │       ├── study-stats.ts       # localStorage stats (legacy)
+│       ├── push-notifications.ts # Client-side push subscribe/unsubscribe
 │       ├── points.ts            # Client-side points API wrapper
 │       └── supabase/            # client.ts, server.ts, db-types.ts
 ├── middleware.ts             # Auth guard — redirects unauthenticated to /login
+├── public/sw.js              # Service worker — push event handler
+├── vercel.json               # Vercel Cron config
 └── public/math/              # SVG images for math card visuals
 ```
+
+## Cron Jobs
+
+| Job | Schedule | Runner | What it does |
+|-----|----------|--------|-------------|
+| Daily reminder | `0 0 * * *` (midnight UTC) | Vercel Cron | Push notifications for daily goal + streak-at-risk |
+| Canvas sync | `0 6 * * *` (6 AM UTC) | GitHub Actions | Pre-fetch Canvas grades + assignments for all students |
+| Topic match | `5 6 * * *` | GitHub Actions | AI matches upcoming assignments to card topics |
+| Assign topics | `10 6 * * *` | GitHub Actions | Auto-tag cards missing topics |
+
+All cron endpoints require `Authorization: Bearer CRON_SECRET`. GitHub Actions workflow: `.github/workflows/daily-crons.yml`.
 
 ## Tech Stack
 

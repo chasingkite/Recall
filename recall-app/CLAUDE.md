@@ -61,6 +61,12 @@ app/
 │   ├── audit-fix/               # AI-suggested card fixes
 │   ├── audit-correctness/       # AI fact-checking for imported cards
 │   ├── assign-topics/           # AI topic categorization
+│   ├── push/subscribe/          # Save/delete Web Push subscriptions
+│   ├── push/send/               # Send push notifications via web-push
+│   ├── cron/daily-reminder/     # Vercel Cron — daily study/streak reminders
+│   ├── cron/canvas-sync/        # GitHub Actions — pre-cache Canvas data for all students
+│   ├── cron/topic-match/        # GitHub Actions — AI match assignments → card topics
+│   ├── cron/assign-topics/      # GitHub Actions — auto-tag cards missing topics
 │   ├── canvas/                  # Direct Canvas API proxy
 │   ├── canvas-sync/             # Cached Canvas data (1-hour TTL)
 │   └── seed/                    # DB seeding endpoint
@@ -68,9 +74,24 @@ app/
     ├── spaced-repetition.ts     # Client-side FSRS + answer checking (Levenshtein, normalization)
     ├── sample-cards.ts          # StudyCard type + sample data (MAX_SESSION_SIZE = 20)
     ├── study-stats.ts           # localStorage stats (legacy — server-side is primary)
+    ├── push-notifications.ts    # Client-side push subscribe/unsubscribe helpers
     ├── points.ts                # Client-side points API wrapper
     └── supabase/                # client.ts (browser), server.ts (SSR), db-types.ts
+├── public/sw.js                 # Service worker — push event handler
+├── vercel.json                  # Vercel Cron config (daily reminder)
+├── web-push.d.ts                # Type declaration for web-push
 ```
+
+## Cron Jobs
+
+| Job | Schedule | Runner | What it does |
+|-----|----------|--------|-------------|
+| Daily reminder | `0 0 * * *` (midnight UTC) | Vercel Cron | Push notifications to users who haven't met daily goal; streak-at-risk alerts |
+| Canvas sync | `0 6 * * *` (6 AM UTC) | GitHub Actions | Pre-fetches grades + assignments for all Canvas-linked students |
+| Topic match | `5 6 * * *` | GitHub Actions | AI matches upcoming Canvas assignments to card topics |
+| Assign topics | `10 6 * * *` | GitHub Actions | Auto-tags cards missing topics in batches of 50 |
+
+All cron endpoints require `Authorization: Bearer CRON_SECRET`. GitHub Actions workflow at `.github/workflows/daily-crons.yml` — also supports manual trigger via `workflow_dispatch`.
 
 ## Architecture
 
