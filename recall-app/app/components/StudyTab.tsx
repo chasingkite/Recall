@@ -137,6 +137,9 @@ export default function StudyTab() {
   const [celebrationPct, setCelebrationPct] = useState(0);
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
 
+  // Saving state
+  const [saving, setSaving] = useState(false);
+
   // Study sheet (Phase 7) — collapsible during study
   const [studySheetContent, setStudySheetContent] = useState("");
   const [sheetLoading, setSheetLoading] = useState(false);
@@ -379,9 +382,10 @@ export default function StudyTab() {
 
   async function handleNext() {
     if (currentIndex + 1 >= cards.length) {
-      // Session complete — save progress
-      await saveSessionProgress();
+      // Show done screen immediately, save in background
+      setSaving(true);
       setPhase("done");
+      saveSessionProgress().finally(() => setSaving(false));
     } else {
       setCurrentIndex((i) => i + 1);
       setAnswered(false);
@@ -395,7 +399,10 @@ export default function StudyTab() {
   async function saveSessionProgress() {
     if (!userId) return;
 
-    const accuracy = cards.length > 0 ? correctCount / cards.length : 0;
+    // Use sessionAnswers as source of truth (state setters may not have flushed)
+    const totalAnswered = sessionAnswers.length;
+    const totalCorrect = sessionAnswers.filter((a) => a.correct).length;
+    const accuracy = totalAnswered > 0 ? totalCorrect / totalAnswered : 0;
 
     // Save to daily progress
     try {
@@ -404,8 +411,8 @@ export default function StudyTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId,
-          cardsReviewed: cards.length,
-          cardsCorrect: correctCount,
+          cardsReviewed: totalAnswered,
+          cardsCorrect: totalCorrect,
         }),
       });
       const progress = await res.json();
@@ -422,13 +429,13 @@ export default function StudyTab() {
     } catch {}
 
     // Save study session to Supabase
-    const topics = [...new Set(cards.map((c) => c.topic).filter(Boolean))] as string[];
-    const subjects = [...new Set(cards.map((c) => c.subject).filter(Boolean))] as string[];
+    const topics = [...new Set(sessionAnswers.map((a) => a.topic).filter(Boolean))] as string[];
+    const subjects = [...new Set(sessionAnswers.map((a) => a.subject).filter(Boolean))] as string[];
     try {
       await supabase.from("study_sessions").insert({
         user_id: userId,
-        cards_reviewed: cards.length,
-        cards_correct: correctCount,
+        cards_reviewed: totalAnswered,
+        cards_correct: totalCorrect,
         topics,
         subjects,
       });
@@ -593,10 +600,19 @@ export default function StudyTab() {
         <p className="text-3xl font-bold text-blue-600 mb-2">{pct}%</p>
 
         {/* Points earned */}
-        <p className="text-sm text-amber-600 mb-2">⭐ +{sessionPoints} pts earned</p>
-        {sessionBonuses.map((b, i) => (
-          <p key={i} className="text-xs text-amber-500">{b}</p>
-        ))}
+        {saving ? (
+          <div className="flex items-center gap-2 mb-2">
+            <div className="animate-spin h-3.5 w-3.5 border-2 border-amber-500 border-t-transparent rounded-full" />
+            <span className="text-xs text-amber-500">Saving progress...</span>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-amber-600 mb-2">⭐ +{sessionPoints} pts earned</p>
+            {sessionBonuses.map((b, i) => (
+              <p key={i} className="text-xs text-amber-500">{b}</p>
+            ))}
+          </>
+        )}
 
         {/* Memory Score */}
         {userId && <MemoryScoreWidget key={memoryRefreshKey} userId={userId} />}

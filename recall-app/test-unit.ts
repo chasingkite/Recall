@@ -202,6 +202,54 @@ function testConstants() {
   assert(DIFFICULTY_LEVELS[4].name === "Expert", "Level 5 = Expert");
 }
 
+// ==================== Daily Progress Accumulation ====================
+function testDailyProgressAccumulation() {
+  console.log("\n📊 Daily Progress Accumulation");
+
+  // Simulate the accumulation logic from daily-progress API
+  function accumulate(existing: { cards_reviewed: number; cards_correct: number; goal_met: boolean } | null, newReviewed: number, newCorrect: number) {
+    const totalReviewed = (existing?.cards_reviewed || 0) + newReviewed;
+    const totalCorrect = (existing?.cards_correct || 0) + newCorrect;
+    const wasGoalMet = existing?.goal_met || false;
+    const isGoalMet = totalCorrect >= 20;
+    return { cards_reviewed: totalReviewed, cards_correct: totalCorrect, goal_met: isGoalMet, just_met_goal: isGoalMet && !wasGoalMet };
+  }
+
+  // Session 1: 10 correct out of 20
+  const after1 = accumulate(null, 20, 10);
+  assert(after1.cards_reviewed === 20, "Session 1: reviewed = 20");
+  assert(after1.cards_correct === 10, "Session 1: correct = 10");
+  assert(after1.goal_met === false, "Session 1: goal not met (10/20)");
+
+  // Session 2: 1 correct out of 5
+  const after2 = accumulate(after1, 5, 1);
+  assert(after2.cards_reviewed === 25, "Session 2: reviewed = 25 (20+5)");
+  assert(after2.cards_correct === 11, "Session 2: correct = 11 (10+1)");
+  assert(after2.goal_met === false, "Session 2: goal not met (11/20)");
+
+  // Session 3: 9 correct out of 10 — hits goal
+  const after3 = accumulate(after2, 10, 9);
+  assert(after3.cards_reviewed === 35, "Session 3: reviewed = 35");
+  assert(after3.cards_correct === 20, "Session 3: correct = 20");
+  assert(after3.goal_met === true, "Session 3: goal met!");
+  assert(after3.just_met_goal === true, "Session 3: just_met_goal fires");
+
+  // Session 4: goal already met — shouldn't re-fire
+  const after4 = accumulate({ ...after3, goal_met: true }, 5, 5);
+  assert(after4.cards_correct === 25, "Session 4: correct = 25");
+  assert(after4.goal_met === true, "Session 4: still met");
+  assert(after4.just_met_goal === false, "Session 4: just_met_goal does NOT re-fire");
+
+  // Edge case: 0 correct
+  const zeroSession = accumulate(after1, 5, 0);
+  assert(zeroSession.cards_correct === 10, "Zero-correct session: stays at 10");
+
+  // Edge case: null existing (first session)
+  const first = accumulate(null, 5, 3);
+  assert(first.cards_reviewed === 5, "First session from null: reviewed = 5");
+  assert(first.cards_correct === 3, "First session from null: correct = 3");
+}
+
 // ==================== MAIN ====================
 console.log("🧪 Recall — Pure Logic Unit Tests");
 console.log("==========================================");
@@ -212,6 +260,7 @@ testNormalizeAnswer();
 testActionToRating();
 testDueAndRetrievability();
 testConstants();
+testDailyProgressAccumulation();
 
 console.log("\n==========================================");
 console.log(`Results: ${passed} passed, ${failed} failed out of ${passed + failed}`);
