@@ -140,6 +140,12 @@ export function normalizeAnswer(text: string): string {
     .replace(/\s+/g, " ");
 }
 
+const FILLER_WORDS = new Set(["the", "a", "an", "is", "are", "was", "were", "of", "to", "in", "for", "on", "with", "at", "by", "it", "its", "and", "or", "that", "this", "be", "as"]);
+
+function stripFillerWords(text: string): string {
+  return text.split(" ").filter(w => !FILLER_WORDS.has(w)).join(" ").trim();
+}
+
 export function checkAnswer(userAnswer: string, correctAnswer: string): { correct: boolean; close: boolean } {
   const a = normalizeAnswer(userAnswer);
   // Extract core answer: strip parenthetical explanations and anything after common separators
@@ -163,6 +169,22 @@ export function checkAnswer(userAnswer: string, correctAnswer: string): { correc
   if (levenshtein(a, bFull) <= 1) return { correct: true, close: true };
   // Check if answer is contained in the correct answer (e.g., "x⁸" within "x⁸ (add exponents: 5+3=8)")
   if (b.length > 2 && a.length >= b.length * 0.8 && bFull.includes(a)) return { correct: true, close: true };
+
+  // Fuzzy match: strip filler words and compare
+  const aStripped = stripFillerWords(a);
+  const bStripped = stripFillerWords(b);
+  if (aStripped.length > 2 && aStripped === bStripped) return { correct: true, close: true };
+  if (aStripped.length > 2 && levenshtein(aStripped, bStripped) <= 2) return { correct: true, close: true };
+
+  // Word-set match: same meaningful words in any order
+  const aWords = new Set(aStripped.split(" ").filter(w => w.length > 1));
+  const bWords = new Set(bStripped.split(" ").filter(w => w.length > 1));
+  if (aWords.size >= 2 && bWords.size >= 2) {
+    const intersection = [...aWords].filter(w => bWords.has(w));
+    const coverage = intersection.length / Math.max(aWords.size, bWords.size);
+    if (coverage >= 0.8) return { correct: true, close: true };
+  }
+
   return { correct: false, close: false };
 }
 

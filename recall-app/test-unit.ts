@@ -115,6 +115,23 @@ function testAnswerChecking() {
   r = checkAnswer("x2", "x²");
   assert(r.correct === true, "Superscript normalization");
 
+  // Fuzzy matching — filler word tolerance
+  r = checkAnswer("k times original perimeter", "k times the original perimeter");
+  assert(r.correct === true, "Filler word 'the' ignored");
+
+  r = checkAnswer("removal of waste products", "the removal of waste products");
+  assert(r.correct === true, "Leading 'the' ignored");
+
+  r = checkAnswer("nucleus controls cell activities", "the nucleus controls cell activities");
+  assert(r.correct === true, "Article tolerance");
+
+  r = checkAnswer("original perimeter times k", "k times the original perimeter");
+  assert(r.correct === true, "Word order tolerance (same meaningful words)");
+
+  // Still wrong when meaning is different
+  r = checkAnswer("k times original area", "k times the original perimeter");
+  assert(r.correct === false, "Different meaning still wrong (area vs perimeter)");
+
   // Empty answer
   r = checkAnswer("", "hello");
   assert(r.correct === false, "Empty answer = wrong");
