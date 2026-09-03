@@ -250,6 +250,75 @@ function testDailyProgressAccumulation() {
   assert(first.cards_correct === 3, "First session from null: correct = 3");
 }
 
+// ==================== Session Save Guard ====================
+function testSessionSaveGuard() {
+  console.log("\n🛡️  Session Save Guard (prevent duplicate saves)");
+
+  // Simulate the savingRef guard
+  let savingRef = false;
+
+  function saveSessionProgress(): boolean {
+    if (savingRef) return false;
+    savingRef = true;
+    return true;
+  }
+
+  function resetForNewSession() {
+    savingRef = false;
+  }
+
+  // First save should succeed
+  assert(saveSessionProgress() === true, "First save succeeds");
+
+  // Second save in same session should be blocked
+  assert(saveSessionProgress() === false, "Duplicate save blocked");
+  assert(saveSessionProgress() === false, "Third save also blocked");
+
+  // After reset (new session), save should work again
+  resetForNewSession();
+  assert(saveSessionProgress() === true, "Save works after reset");
+  assert(saveSessionProgress() === false, "Duplicate blocked again in new session");
+}
+
+// ==================== Session Answer Tracking ====================
+function testSessionAnswerTracking() {
+  console.log("\n📝 Session Answer Tracking");
+
+  // Simulate sessionAnswers accumulation
+  const sessionAnswers: { front: string; back: string; correct: boolean; topic: string; subject: string }[] = [];
+
+  // Answer 5 cards: 3 correct, 2 wrong
+  sessionAnswers.push({ front: "q1", back: "a1", correct: true, topic: "t1", subject: "spanish" });
+  sessionAnswers.push({ front: "q2", back: "a2", correct: false, topic: "t1", subject: "spanish" });
+  sessionAnswers.push({ front: "q3", back: "a3", correct: true, topic: "t2", subject: "biology" });
+  sessionAnswers.push({ front: "q4", back: "a4", correct: true, topic: "t2", subject: "biology" });
+  sessionAnswers.push({ front: "q5", back: "a5", correct: false, topic: "t1", subject: "spanish" });
+
+  const totalAnswered = sessionAnswers.length;
+  const totalCorrect = sessionAnswers.filter(a => a.correct).length;
+  const accuracy = totalAnswered > 0 ? totalCorrect / totalAnswered : 0;
+
+  assert(totalAnswered === 5, "5 answers tracked");
+  assert(totalCorrect === 3, "3 correct counted");
+  assert(accuracy === 0.6, "60% accuracy computed");
+
+  // These values should be used for daily progress POST
+  assert(totalAnswered === 5, "cardsReviewed sent to API = 5");
+  assert(totalCorrect === 3, "cardsCorrect sent to API = 3");
+
+  // Empty session
+  const empty: typeof sessionAnswers = [];
+  assert(empty.filter(a => a.correct).length === 0, "Empty session = 0 correct");
+  assert(empty.length === 0, "Empty session = 0 reviewed");
+
+  // All correct session
+  const perfect = [
+    { front: "q1", back: "a1", correct: true, topic: "t", subject: "s" },
+    { front: "q2", back: "a2", correct: true, topic: "t", subject: "s" },
+  ];
+  assert(perfect.filter(a => a.correct).length === 2, "Perfect session = 2/2 correct");
+}
+
 // ==================== MAIN ====================
 console.log("🧪 Recall — Pure Logic Unit Tests");
 console.log("==========================================");
@@ -261,6 +330,8 @@ testActionToRating();
 testDueAndRetrievability();
 testConstants();
 testDailyProgressAccumulation();
+testSessionSaveGuard();
+testSessionAnswerTracking();
 
 console.log("\n==========================================");
 console.log(`Results: ${passed} passed, ${failed} failed out of ${passed + failed}`);

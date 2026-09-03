@@ -94,11 +94,11 @@ function assignVariety(cards: StudyCard[], all: StudyCard[]): StudyCard[] {
   });
 }
 
-const SUBJECT_COLORS: Record<string, string> = {
-  spanish: "text-orange-400",
-  biology: "text-green-400",
-  english: "text-purple-400",
-  math: "text-blue-400",
+const SUBJECT_COLORS: Record<string, { text: string; bg: string; border: string }> = {
+  spanish: { text: "text-orange-500", bg: "bg-orange-50", border: "border-orange-200" },
+  biology: { text: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-200" },
+  english: { text: "text-violet-500", bg: "bg-violet-50", border: "border-violet-200" },
+  math: { text: "text-sky-500", bg: "bg-sky-50", border: "border-sky-200" },
 };
 
 type Phase = "start" | "studying" | "done";
@@ -139,6 +139,7 @@ export default function StudyTab() {
 
   // Saving state
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   // Study sheet (Phase 7) — collapsible during study
   const [studySheetContent, setStudySheetContent] = useState("");
@@ -226,6 +227,7 @@ export default function StudyTab() {
     setSessionAnswers([]);
     setExplainFeedback(null);
     setShowReviewNotes(false);
+    savingRef.current = false;
     setTimeout(() => inputRef.current?.focus(), 100);
 
     // Fetch study sheet in background (available via "Review Notes" button)
@@ -398,6 +400,8 @@ export default function StudyTab() {
 
   async function saveSessionProgress() {
     if (!userId) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
 
     // Use sessionAnswers as source of truth (state setters may not have flushed)
     const totalAnswered = sessionAnswers.length;
@@ -478,6 +482,8 @@ export default function StudyTab() {
       setHintUsed(false);
       setShowHint(false);
       setJustMetGoal(false);
+      setSessionAnswers([]);
+      savingRef.current = false;
       setTimeout(() => inputRef.current?.focus(), 100);
       return;
     }
@@ -499,8 +505,11 @@ export default function StudyTab() {
   // Loading
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-gray-950 flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+      <div className="fixed inset-0 bg-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin h-8 w-8 border-[3px] border-gray-200 border-t-blue-500 rounded-full" />
+          <p className="text-sm text-gray-400 font-medium">Loading...</p>
+        </div>
       </div>
     );
   }
@@ -508,57 +517,60 @@ export default function StudyTab() {
   // START SCREEN
   if (phase === "start") {
     const progressPct = Math.min(100, Math.round((dailyCorrect / DAILY_GOAL_CARDS) * 100));
-    const progressColor = dailyGoalMet ? "bg-amber-400" : progressPct >= 75 ? "bg-green-500" : progressPct >= 50 ? "bg-yellow-500" : "bg-blue-500";
 
     return (
-      <div className="min-h-[80vh] flex flex-col items-center justify-center px-6 text-center">
-        {/* Streak Badge */}
-        {userId && (
-          <div className="mb-4">
-            <StreakBadge userId={userId} />
-          </div>
-        )}
+      <div className="min-h-[80vh] flex flex-col items-center justify-center px-6">
+        {/* Status row */}
+        <div className="flex items-center gap-3 mb-6">
+          {userId && <StreakBadge userId={userId} />}
+        </div>
 
         {/* Memory Score */}
         {userId && <MemoryScoreWidget key={memoryRefreshKey} userId={userId} />}
 
-        {/* Daily Goal Progress */}
-        <div className="w-full max-w-xs mb-6">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-medium text-gray-500">Daily Goal</span>
-            <span className={`text-xs font-bold ${dailyGoalMet ? "text-amber-600" : "text-gray-700"}`}>
-              {dailyCorrect} / {DAILY_GOAL_CARDS} mastered
+        {/* Daily Goal Card */}
+        <div className="w-full max-w-sm bg-white/80 backdrop-blur-xl rounded-[20px] border border-gray-200/60 shadow-sm p-5 mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[13px] font-semibold text-gray-500 tracking-wide">Daily Goal</span>
+            <span className={`text-[13px] font-bold tabular-nums ${dailyGoalMet ? "text-amber-500" : "text-gray-800"}`}>
+              {dailyCorrect} / {DAILY_GOAL_CARDS}
             </span>
           </div>
-          <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+              className={`h-full rounded-full transition-all duration-700 ease-out ${
+                dailyGoalMet ? "bg-gradient-to-r from-amber-400 to-amber-500"
+                : progressPct >= 75 ? "bg-gradient-to-r from-green-400 to-emerald-500"
+                : progressPct >= 50 ? "bg-gradient-to-r from-yellow-400 to-amber-400"
+                : "bg-gradient-to-r from-blue-400 to-blue-500"
+              }`}
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          {dailyGoalMet ? (
-            <p className="text-xs text-amber-600 mt-1.5 font-medium">Goal complete! Keep going for bonus points.</p>
-          ) : (
-            <p className="text-xs text-gray-400 mt-1.5">{cardsRemaining} more correct answers to hit your goal</p>
-          )}
+          <p className="text-[12px] text-gray-400 mt-2">
+            {dailyGoalMet
+              ? "Goal complete! Extra cards earn bonus points."
+              : `${cardsRemaining} more correct to reach your goal`}
+          </p>
         </div>
 
-        <div className="text-5xl mb-6">{dailyGoalMet ? "🏆" : "🪁"}</div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          {dailyGoalMet ? "Goal reached! Study more?" : "Ready to study?"}
+        {/* CTA */}
+        <h1 className="text-[28px] font-bold text-gray-900 mb-1 tracking-tight">
+          {dailyGoalMet ? "Keep going?" : "Ready to study?"}
         </h1>
         {studyReason && (
-          <p className="text-sm text-blue-600 mb-1">📋 {studyReason} — due soon</p>
+          <p className="text-[13px] text-blue-500 font-medium mb-1">{studyReason} — due soon</p>
         )}
-        <p className="text-sm text-gray-500 mb-8">{totalCards} cards available · 5 cards per session</p>
+        <p className="text-[13px] text-gray-400 mb-8">{totalCards} cards · 5 per session</p>
+
         <button
           onClick={handleStart}
-          className="w-full max-w-xs py-4 rounded-2xl bg-blue-600 text-white text-lg font-bold hover:bg-blue-700 active:scale-95 transition-all shadow-lg"
+          className="w-full max-w-sm py-[14px] rounded-[14px] bg-blue-500 text-white text-[17px] font-semibold hover:bg-blue-600 active:scale-[0.97] active:opacity-90 transition-all shadow-[0_2px_12px_rgba(59,130,246,0.3)]"
         >
-          Start
+          Start Session
         </button>
         {cards.length === 0 && (
-          <p className="text-sm text-gray-400 mt-4">No cards available. Import some from the Admin tab.</p>
+          <p className="text-[13px] text-gray-400 mt-4">No cards available yet.</p>
         )}
       </div>
     );
@@ -568,10 +580,9 @@ export default function StudyTab() {
   if (phase === "done") {
     const pct = cards.length > 0 ? Math.round((correctCount / cards.length) * 100) : 0;
     const progressPct = Math.min(100, Math.round((dailyCorrect / DAILY_GOAL_CARDS) * 100));
-    const progressColor = dailyGoalMet ? "bg-amber-400" : progressPct >= 75 ? "bg-green-500" : progressPct >= 50 ? "bg-yellow-500" : "bg-blue-500";
 
     return (
-      <div className="min-h-[80vh] flex flex-col items-center justify-center px-6 text-center">
+      <div className="min-h-[80vh] flex flex-col items-center justify-center px-6">
         {/* Celebration Modal */}
         {showCelebration && (
           <CelebrationModal
@@ -580,63 +591,71 @@ export default function StudyTab() {
           />
         )}
 
-        {/* Streak Badge */}
+        {/* Streak */}
         {userId && (
-          <div className="mb-3">
+          <div className="mb-4">
             <StreakBadge userId={userId} />
           </div>
         )}
 
-        {/* Goal just met celebration */}
+        {/* Goal just met */}
         {justMetGoal && (
-          <div className="w-full max-w-xs mb-4 p-3 rounded-2xl bg-amber-50 border-2 border-amber-300">
-            <p className="text-lg font-bold text-amber-700">🎯 Daily Goal Complete!</p>
-            <p className="text-xs text-amber-600 mt-1">+50 pts earned for hitting your goal</p>
+          <div className="w-full max-w-sm mb-5 p-4 rounded-[20px] bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200/60 text-center">
+            <p className="text-[20px] font-bold text-amber-600">Daily Goal Complete!</p>
+            <p className="text-[13px] text-amber-500 mt-1">+50 pts earned</p>
           </div>
         )}
 
-        <div className="text-6xl mb-4">{pct >= 80 ? "🎉" : pct >= 50 ? "👍" : "💪"}</div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">{correctCount}/{cards.length} correct</h1>
-        <p className="text-3xl font-bold text-blue-600 mb-2">{pct}%</p>
+        {/* Score card */}
+        <div className="w-full max-w-sm bg-white/80 backdrop-blur-xl rounded-[24px] border border-gray-200/60 shadow-sm p-6 mb-5 text-center">
+          <p className="text-[48px] font-bold text-gray-900 tracking-tight">{pct}%</p>
+          <p className="text-[15px] text-gray-500 font-medium">{correctCount} of {cards.length} correct</p>
 
-        {/* Points earned */}
-        {saving ? (
-          <div className="flex items-center gap-2 mb-2">
-            <div className="animate-spin h-3.5 w-3.5 border-2 border-amber-500 border-t-transparent rounded-full" />
-            <span className="text-xs text-amber-500">Saving progress...</span>
+          {/* Points */}
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            {saving ? (
+              <div className="flex items-center justify-center gap-2">
+                <div className="animate-spin h-3.5 w-3.5 border-2 border-amber-400 border-t-transparent rounded-full" />
+                <span className="text-[13px] text-gray-400">Saving...</span>
+              </div>
+            ) : (
+              <>
+                <p className="text-[15px] font-semibold text-amber-500">+{sessionPoints} pts</p>
+                {sessionBonuses.map((b, i) => (
+                  <p key={i} className="text-[12px] text-amber-400 mt-0.5">{b}</p>
+                ))}
+              </>
+            )}
           </div>
-        ) : (
-          <>
-            <p className="text-sm text-amber-600 mb-2">⭐ +{sessionPoints} pts earned</p>
-            {sessionBonuses.map((b, i) => (
-              <p key={i} className="text-xs text-amber-500">{b}</p>
-            ))}
-          </>
-        )}
+        </div>
 
         {/* Memory Score */}
         {userId && <MemoryScoreWidget key={memoryRefreshKey} userId={userId} />}
 
-        {/* Daily progress bar */}
-        <div className="w-full max-w-xs mt-4 mb-6">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-gray-500">Daily Goal</span>
-            <span className={`text-xs font-bold ${dailyGoalMet ? "text-amber-600" : "text-gray-700"}`}>
+        {/* Daily progress */}
+        <div className="w-full max-w-sm bg-white/80 backdrop-blur-xl rounded-[16px] border border-gray-200/60 p-4 mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[13px] font-semibold text-gray-500">Daily Goal</span>
+            <span className={`text-[13px] font-bold tabular-nums ${dailyGoalMet ? "text-amber-500" : "text-gray-800"}`}>
               {dailyCorrect} / {DAILY_GOAL_CARDS}
             </span>
           </div>
-          <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+              className={`h-full rounded-full transition-all duration-700 ease-out ${
+                dailyGoalMet ? "bg-gradient-to-r from-amber-400 to-amber-500"
+                : progressPct >= 75 ? "bg-gradient-to-r from-green-400 to-emerald-500"
+                : "bg-gradient-to-r from-blue-400 to-blue-500"
+              }`}
               style={{ width: `${progressPct}%` }}
             />
           </div>
           {!dailyGoalMet && (
-            <p className="text-xs text-gray-400 mt-1">{DAILY_GOAL_CARDS - dailyCorrect} more to go!</p>
+            <p className="text-[12px] text-gray-400 mt-1.5">{DAILY_GOAL_CARDS - dailyCorrect} more to go</p>
           )}
         </div>
 
-        {/* Gap Analysis (Phase 10) */}
+        {/* Gap Analysis */}
         {gapAnalysis && (
           <GapAnalysisComponent
             weakTopics={gapAnalysis.weakTopics}
@@ -649,25 +668,28 @@ export default function StudyTab() {
 
         {/* Re-queue info */}
         {requeuedCards.length > 0 && (
-          <p className="text-xs text-red-500 mb-3">
-            {requeuedCards.length} card{requeuedCards.length > 1 ? "s" : ""} to retry (wrong answers)
+          <p className="text-[12px] text-red-400 font-medium mb-3 mt-3">
+            {requeuedCards.length} card{requeuedCards.length > 1 ? "s" : ""} to retry
           </p>
         )}
 
-        <button
-          onClick={handleMore}
-          className="w-full max-w-xs py-4 rounded-2xl bg-blue-600 text-white text-lg font-bold hover:bg-blue-700 active:scale-95 transition-all shadow-lg mb-3"
-        >
-          {requeuedCards.length > 0
-            ? `Retry ${requeuedCards.length} missed card${requeuedCards.length > 1 ? "s" : ""}`
-            : "Do 5 more"}
-        </button>
-        <button
-          onClick={() => setPhase("start")}
-          className="w-full max-w-xs py-3 rounded-2xl bg-gray-100 text-gray-700 text-sm font-medium"
-        >
-          Done for now
-        </button>
+        {/* Actions */}
+        <div className="w-full max-w-sm mt-4 space-y-2.5">
+          <button
+            onClick={handleMore}
+            className="w-full py-[14px] rounded-[14px] bg-blue-500 text-white text-[17px] font-semibold hover:bg-blue-600 active:scale-[0.97] transition-all shadow-[0_2px_12px_rgba(59,130,246,0.3)]"
+          >
+            {requeuedCards.length > 0
+              ? `Retry ${requeuedCards.length} Missed`
+              : "Continue Studying"}
+          </button>
+          <button
+            onClick={() => setPhase("start")}
+            className="w-full py-[12px] rounded-[14px] bg-gray-100 text-gray-500 text-[15px] font-medium hover:bg-gray-200 active:scale-[0.98] transition-all"
+          >
+            Done for Now
+          </button>
+        </div>
       </div>
     );
   }
@@ -675,115 +697,128 @@ export default function StudyTab() {
   // STUDYING
   if (!card) return null;
 
-  const enrichments = [
-    card.realWorldConnection ? { icon: "📱", label: "Real-world", text: card.realWorldConnection } : null,
-    card.tokConnection ? { icon: "🧠", label: "How do we know?", text: card.tokConnection } : null,
-    card.interdisciplinary ? { icon: "🔗", label: "Across subjects", text: card.interdisciplinary } : null,
-  ].filter(Boolean);
-  const currentEnrich = enrichments[enrichField % enrichments.length];
+  const subjectStyle = SUBJECT_COLORS[card.subject] || { text: "text-gray-500", bg: "bg-gray-50", border: "border-gray-200" };
 
   return (
     <div className="min-h-[80vh] flex flex-col px-4 py-4">
-      {/* Progress dots + Review Notes toggle */}
-      <div className="flex items-center justify-between mb-4 px-1">
-        <div className="flex gap-1">
+      {/* Top bar: progress + review notes */}
+      <div className="flex items-center justify-between mb-5 px-1">
+        <div className="flex gap-[5px]">
           {cards.map((_, i) => (
             <div
               key={i}
-              className={`h-1.5 rounded-full transition-all ${
-                i < currentIndex ? "w-6 bg-blue-500" :
-                i === currentIndex ? "w-8 bg-blue-600" :
-                "w-4 bg-gray-300"
+              className={`h-[5px] rounded-full transition-all duration-300 ${
+                i < currentIndex ? "w-7 bg-blue-500" :
+                i === currentIndex ? "w-9 bg-blue-500" :
+                "w-4 bg-gray-200"
               }`}
             />
           ))}
         </div>
         <button
           onClick={() => setShowReviewNotes(!showReviewNotes)}
-          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+          className={`text-[11px] font-medium px-3 py-[5px] rounded-full transition-all ${
             showReviewNotes
-              ? "bg-indigo-100 border-indigo-300 text-indigo-700"
-              : "bg-gray-100 border-gray-200 text-gray-500 hover:bg-gray-200"
+              ? "bg-indigo-500 text-white shadow-sm"
+              : "bg-gray-100 text-gray-500 active:bg-gray-200"
           }`}
         >
-          {sheetLoading ? "📝 Loading..." : showReviewNotes ? "📝 Hide Notes" : "📝 Review Notes"}
+          {sheetLoading ? "Loading..." : showReviewNotes ? "Hide Notes" : "Notes"}
         </button>
       </div>
 
-      {/* Collapsible Review Notes Panel */}
+      {/* Collapsible Review Notes */}
       {showReviewNotes && studySheetContent && (
-        <div className="mb-4 max-h-48 overflow-y-auto rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+        <div className="mb-4 max-h-44 overflow-y-auto rounded-2xl bg-indigo-50/70 backdrop-blur-sm border border-indigo-100 p-4">
           {studySheetContent.split("\n").map((line, i) => {
             const trimmed = line.trim();
             if (!trimmed) return null;
             if (trimmed.startsWith("## ") || trimmed.startsWith("**")) {
-              return <p key={i} className="text-xs font-bold text-indigo-700 mt-2 mb-0.5">{trimmed.replace(/^##\s*/, "").replace(/\*\*/g, "")}</p>;
+              return <p key={i} className="text-[12px] font-bold text-indigo-700 mt-2.5 mb-0.5">{trimmed.replace(/^##\s*/, "").replace(/\*\*/g, "")}</p>;
             }
             if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
-              return <p key={i} className="text-xs text-indigo-600 ml-2">• {trimmed.slice(2)}</p>;
+              return <p key={i} className="text-[12px] text-indigo-600/80 ml-2 leading-relaxed">{trimmed.slice(2)}</p>;
             }
-            return <p key={i} className="text-xs text-indigo-600">{trimmed}</p>;
+            return <p key={i} className="text-[12px] text-indigo-600/80 leading-relaxed">{trimmed}</p>;
           })}
         </div>
       )}
       {showReviewNotes && sheetLoading && (
-        <div className="mb-4 flex items-center justify-center py-4 rounded-xl border border-indigo-200 bg-indigo-50">
-          <div className="animate-spin h-4 w-4 border-2 border-indigo-500 border-t-transparent rounded-full mr-2" />
-          <span className="text-xs text-indigo-500">Generating review notes...</span>
+        <div className="mb-4 flex items-center justify-center py-5 rounded-2xl bg-indigo-50/70 border border-indigo-100">
+          <div className="animate-spin h-4 w-4 border-2 border-indigo-400 border-t-transparent rounded-full mr-2" />
+          <span className="text-[12px] text-indigo-400">Generating notes...</span>
         </div>
       )}
 
-      {/* Card */}
+      {/* Card area */}
       <div className="flex-1 flex flex-col items-center justify-center">
         {!answered ? (
           <>
-            {/* Subject tag */}
-            <span className={`text-xs font-medium uppercase tracking-wide mb-3 ${SUBJECT_COLORS[card.subject] || "text-gray-400"}`}>
+            {/* Subject pill */}
+            <span className={`text-[11px] font-semibold uppercase tracking-widest mb-4 px-3 py-1 rounded-full ${subjectStyle.bg} ${subjectStyle.text} ${subjectStyle.border} border`}>
               {card.subject}
             </span>
 
             {/* Image */}
-            {card.imageUrl && <img src={card.imageUrl} alt="" className="w-full max-w-[200px] h-auto rounded-lg mb-4" />}
+            {card.imageUrl && (
+              <img src={card.imageUrl} alt="" className="w-full max-w-[180px] h-auto rounded-2xl mb-5 shadow-sm" />
+            )}
 
             {/* Question */}
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center mb-6 leading-snug">
+            <h2 className="text-[22px] sm:text-[26px] font-bold text-gray-900 text-center mb-8 leading-snug tracking-tight max-w-sm">
               {card.front}
             </h2>
 
             {/* True/False statement */}
             {card.answerType === "true-false" && card.trueFalseStatement && (
-              <p className="text-base text-gray-600 text-center bg-gray-50 rounded-xl p-4 mb-4 max-w-sm">
-                &ldquo;{card.trueFalseStatement}&rdquo;
-              </p>
+              <div className="bg-gray-50/80 backdrop-blur-sm rounded-2xl border border-gray-200/60 p-5 mb-5 max-w-sm">
+                <p className="text-[15px] text-gray-600 text-center leading-relaxed italic">
+                  &ldquo;{card.trueFalseStatement}&rdquo;
+                </p>
+              </div>
             )}
 
-            {/* Answer input */}
+            {/* Answer inputs */}
             <div className="w-full max-w-sm">
+              {/* Multiple Choice */}
               {card.answerType === "multiple-choice" && card.choices && (
-                <div className="space-y-2">
-                  {card.choices.map((choice) => (
+                <div className="space-y-2.5">
+                  {card.choices.map((choice, idx) => (
                     <button
                       key={choice}
                       onClick={() => handleMC(choice)}
-                      className="w-full py-3.5 px-4 rounded-xl border border-gray-200 bg-white text-sm text-left text-gray-900 hover:bg-blue-50 hover:border-blue-300 active:scale-[0.98] transition-all"
+                      className="w-full py-[14px] px-4 rounded-[14px] bg-white border border-gray-200/80 text-[15px] text-left text-gray-800 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:border-blue-300 hover:bg-blue-50/50 active:scale-[0.98] active:shadow-none transition-all"
                     >
+                      <span className="text-gray-400 mr-2 text-[13px]">{String.fromCharCode(65 + idx)}</span>
                       {choice}
                     </button>
                   ))}
                 </div>
               )}
 
+              {/* True / False */}
               {card.answerType === "true-false" && (
                 <div className="flex gap-3">
-                  <button onClick={() => handleTF(true)} className="flex-1 py-4 rounded-xl bg-green-50 border-2 border-green-200 text-green-700 font-bold text-lg hover:bg-green-100 active:scale-95 transition-all">True</button>
-                  <button onClick={() => handleTF(false)} className="flex-1 py-4 rounded-xl bg-red-50 border-2 border-red-200 text-red-700 font-bold text-lg hover:bg-red-100 active:scale-95 transition-all">False</button>
+                  <button
+                    onClick={() => handleTF(true)}
+                    className="flex-1 py-[14px] rounded-[14px] bg-emerald-50 border-2 border-emerald-200 text-emerald-600 font-bold text-[17px] hover:bg-emerald-100 active:scale-[0.97] transition-all"
+                  >
+                    True
+                  </button>
+                  <button
+                    onClick={() => handleTF(false)}
+                    className="flex-1 py-[14px] rounded-[14px] bg-red-50 border-2 border-red-200 text-red-500 font-bold text-[17px] hover:bg-red-100 active:scale-[0.97] transition-all"
+                  >
+                    False
+                  </button>
                 </div>
               )}
 
+              {/* Type-in / Fill-blank */}
               {(card.answerType === "type" || card.answerType === "fill-blank") && (
                 <>
                   {card.answerType === "fill-blank" && card.blankSentence && (
-                    <p className="text-xs text-gray-400 text-center mb-2">{card.blankSentence}</p>
+                    <p className="text-[12px] text-gray-400 text-center mb-2 font-medium">{card.blankSentence}</p>
                   )}
                   <div className="flex gap-2">
                     <input
@@ -793,153 +828,153 @@ export default function StudyTab() {
                       onChange={(e) => setUserAnswer(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter" && userAnswer.trim()) handleAnswer(userAnswer); }}
                       placeholder="Type your answer..."
-                      className="flex-1 px-4 py-3.5 rounded-xl border border-gray-200 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                      className="flex-1 px-4 py-[14px] rounded-[14px] bg-gray-50 border border-gray-200 text-[16px] focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
                       autoFocus
                     />
                     <button
                       onClick={() => userAnswer.trim() && handleAnswer(userAnswer)}
                       disabled={!userAnswer.trim()}
-                      className="px-5 py-3.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-30 active:scale-95 transition-all"
+                      className="px-5 py-[14px] rounded-[14px] bg-blue-500 text-white font-semibold text-[17px] hover:bg-blue-600 disabled:opacity-25 active:scale-[0.95] transition-all shadow-[0_2px_8px_rgba(59,130,246,0.25)]"
                     >
-                      →
+                      &rarr;
                     </button>
                   </div>
-                  {/* Hint + Skip */}
-                  <div className="flex gap-3 mt-3">
+                  <div className="flex gap-2 mt-3">
                     <button
                       onClick={() => { setShowHint(true); setHintUsed(true); }}
-                      className="flex-1 py-2 rounded-xl text-xs text-amber-600 hover:bg-amber-50 transition-colors"
+                      className="flex-1 py-2.5 rounded-[12px] text-[12px] font-medium text-amber-500 bg-amber-50/60 hover:bg-amber-50 active:scale-[0.98] transition-all"
                     >
-                      {showHint ? `💡 ${card.back.slice(0, Math.ceil(card.back.length / 3))}...` : "💡 Hint"}
+                      {showHint ? `${card.back.slice(0, Math.ceil(card.back.length / 3))}...` : "Hint"}
                     </button>
                     <button
                       onClick={handleSkip}
-                      className="flex-1 py-2 rounded-xl text-xs text-gray-400 hover:bg-gray-50 transition-colors"
+                      className="flex-1 py-2.5 rounded-[12px] text-[12px] font-medium text-gray-400 bg-gray-50/60 hover:bg-gray-100 active:scale-[0.98] transition-all"
                     >
-                      🤷 I don&apos;t know
+                      I don&apos;t know
                     </button>
                   </div>
                 </>
               )}
 
-              {/* Explain-back (Phase 9) */}
+              {/* Explain-back */}
               {card.answerType === "explain" && (
                 <>
-                  <p className="text-xs text-indigo-500 text-center mb-2">Explain in your own words — AI will score your answer</p>
+                  <p className="text-[12px] text-indigo-400 text-center mb-3 font-medium">Explain in your own words</p>
                   <textarea
                     value={userAnswer}
                     onChange={(e) => setUserAnswer(e.target.value)}
                     placeholder="Type your explanation here..."
                     rows={4}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none resize-none"
+                    className="w-full px-4 py-3.5 rounded-[14px] bg-gray-50 border border-gray-200 text-[14px] focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 outline-none resize-none transition-all"
                     autoFocus
                   />
                   <button
                     onClick={() => userAnswer.trim().length >= 10 && handleExplain(userAnswer)}
                     disabled={userAnswer.trim().length < 10 || explainLoading}
-                    className="w-full mt-2 py-3.5 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-30 active:scale-95 transition-all"
+                    className="w-full mt-2.5 py-[14px] rounded-[14px] bg-indigo-500 text-white font-semibold text-[15px] hover:bg-indigo-600 disabled:opacity-25 active:scale-[0.97] transition-all shadow-[0_2px_8px_rgba(99,102,241,0.25)]"
                   >
-                    {explainLoading ? "Scoring..." : "Submit Explanation"}
+                    {explainLoading ? "Scoring..." : "Submit"}
                   </button>
-                  <p className="text-xs text-gray-400 text-center mt-1">Minimum 10 characters</p>
                   <button
                     onClick={handleSkip}
-                    className="w-full mt-2 py-2 rounded-xl text-xs text-gray-400 hover:bg-gray-50 transition-colors"
+                    className="w-full mt-2 py-2.5 rounded-[12px] text-[12px] font-medium text-gray-400 hover:bg-gray-50 active:scale-[0.98] transition-all"
                   >
-                    🤷 I don&apos;t know
+                    I don&apos;t know
                   </button>
                 </>
               )}
             </div>
           </>
         ) : (
-          /* ANSWERED — show result */
-          <>
-            {/* Result badge */}
-            <div className={`text-4xl mb-3 ${isCorrect ? "animate-bounce" : ""}`}>
-              {isCorrect ? "✅" : "❌"}
+          /* ANSWERED — result card */
+          <div className="w-full max-w-sm">
+            {/* Result indicator */}
+            <div className={`rounded-[20px] p-6 mb-4 text-center ${
+              isCorrect ? "bg-emerald-50/80" : "bg-red-50/80"
+            } backdrop-blur-sm border ${isCorrect ? "border-emerald-200/60" : "border-red-200/60"}`}>
+              <div className={`text-3xl mb-2 ${isCorrect ? "animate-bounce" : ""}`}>
+                {isCorrect ? "✓" : "✗"}
+              </div>
+              <p className={`text-[14px] font-semibold mb-3 ${isCorrect ? "text-emerald-600" : "text-red-500"}`}>
+                {isCorrect ? (isClose ? "Close enough!" : "Correct!") : "Not quite"}
+              </p>
+              <p className="text-[20px] font-bold text-gray-900">{card.back}</p>
             </div>
 
-            <p className={`text-sm font-medium mb-2 ${isCorrect ? "text-green-600" : "text-red-600"}`}>
-              {isCorrect ? (isClose ? "Close enough!" : "Correct!") : "Not quite — this card will come back"}
-            </p>
-
-            {/* Correct answer */}
-            <p className="text-xl font-bold text-gray-900 text-center mb-4">{card.back}</p>
-
-            {/* Explain-back feedback (Phase 9) */}
+            {/* Explain-back feedback */}
             {explainFeedback && card.answerType === "explain" && (
-              <div className="w-full max-w-sm space-y-2 mb-4">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <span className="text-xs font-medium text-gray-500">Score:</span>
-                  <div className="flex gap-0.5">
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center justify-center gap-2">
+                  <div className="flex gap-[3px]">
                     {[1, 2, 3, 4, 5].map((s) => (
-                      <div key={s} className={`w-5 h-2 rounded-full ${s <= explainFeedback.score ? "bg-indigo-500" : "bg-gray-200"}`} />
+                      <div key={s} className={`w-6 h-[5px] rounded-full ${s <= explainFeedback.score ? "bg-indigo-500" : "bg-gray-200"}`} />
                     ))}
                   </div>
-                  <span className="text-xs text-gray-500">{explainFeedback.score}/5</span>
+                  <span className="text-[12px] text-gray-400 font-medium">{explainFeedback.score}/5</span>
                 </div>
                 {explainFeedback.correct && (
-                  <div className="rounded-xl bg-green-50 p-3">
-                    <p className="text-xs text-green-600 font-medium mb-0.5">What you got right</p>
-                    <p className="text-xs text-green-700">{explainFeedback.correct}</p>
+                  <div className="rounded-2xl bg-emerald-50/70 border border-emerald-100 p-3.5">
+                    <p className="text-[11px] font-semibold text-emerald-600 mb-1">What you got right</p>
+                    <p className="text-[13px] text-emerald-700 leading-relaxed">{explainFeedback.correct}</p>
                   </div>
                 )}
                 {explainFeedback.missing && (
-                  <div className="rounded-xl bg-amber-50 p-3">
-                    <p className="text-xs text-amber-600 font-medium mb-0.5">What was missing</p>
-                    <p className="text-xs text-amber-700">{explainFeedback.missing}</p>
+                  <div className="rounded-2xl bg-amber-50/70 border border-amber-100 p-3.5">
+                    <p className="text-[11px] font-semibold text-amber-600 mb-1">What was missing</p>
+                    <p className="text-[13px] text-amber-700 leading-relaxed">{explainFeedback.missing}</p>
                   </div>
                 )}
                 {explainFeedback.misconceptions && (
-                  <div className="rounded-xl bg-red-50 p-3">
-                    <p className="text-xs text-red-600 font-medium mb-0.5">Misconceptions</p>
-                    <p className="text-xs text-red-700">{explainFeedback.misconceptions}</p>
+                  <div className="rounded-2xl bg-red-50/70 border border-red-100 p-3.5">
+                    <p className="text-[11px] font-semibold text-red-500 mb-1">Misconceptions</p>
+                    <p className="text-[13px] text-red-600 leading-relaxed">{explainFeedback.misconceptions}</p>
                   </div>
                 )}
                 {explainFeedback.feedback && (
-                  <p className="text-sm text-indigo-600 text-center italic">{explainFeedback.feedback}</p>
+                  <p className="text-[13px] text-indigo-500 text-center italic pt-1">{explainFeedback.feedback}</p>
                 )}
               </div>
             )}
 
-            {/* Always show explanation (non-explain cards) */}
+            {/* Explanation (non-explain cards) */}
             {card.explanation && card.answerType !== "explain" && (
-              <div className={`w-full max-w-sm rounded-xl p-3 mb-3 ${isCorrect ? "bg-blue-50" : "bg-red-50"}`}>
-                <p className={`text-xs ${isCorrect ? "text-blue-700" : "text-red-700"}`}>{card.explanation}</p>
+              <div className={`rounded-2xl p-4 mb-3 ${isCorrect ? "bg-blue-50/60 border border-blue-100" : "bg-red-50/60 border border-red-100"}`}>
+                <p className={`text-[13px] leading-relaxed ${isCorrect ? "text-blue-700" : "text-red-600"}`}>{card.explanation}</p>
               </div>
             )}
 
-            {/* Show ALL enrichment fields */}
+            {/* Enrichment fields */}
             {card.realWorldConnection && (
-              <div className="w-full max-w-sm bg-gray-50 rounded-xl p-3 mb-2">
-                <p className="text-xs text-gray-500 mb-1">📱 Real-world</p>
-                <p className="text-sm text-gray-700">{card.realWorldConnection}</p>
+              <div className="rounded-2xl bg-gray-50/60 border border-gray-100 p-3.5 mb-2">
+                <p className="text-[11px] font-semibold text-gray-400 mb-1">Real-world</p>
+                <p className="text-[13px] text-gray-600 leading-relaxed">{card.realWorldConnection}</p>
               </div>
             )}
             {card.tokConnection && (
-              <div className="w-full max-w-sm bg-amber-50 rounded-xl p-3 mb-2">
-                <p className="text-xs text-amber-600 mb-1">🧠 How do we know?</p>
-                <p className="text-sm text-amber-700">{card.tokConnection}</p>
+              <div className="rounded-2xl bg-amber-50/50 border border-amber-100 p-3.5 mb-2">
+                <p className="text-[11px] font-semibold text-amber-500 mb-1">How do we know?</p>
+                <p className="text-[13px] text-amber-700 leading-relaxed">{card.tokConnection}</p>
               </div>
             )}
             {card.interdisciplinary && (
-              <div className="w-full max-w-sm bg-purple-50 rounded-xl p-3 mb-6">
-                <p className="text-xs text-purple-600 mb-1">🔗 Across subjects</p>
-                <p className="text-sm text-purple-700">{card.interdisciplinary}</p>
+              <div className="rounded-2xl bg-violet-50/50 border border-violet-100 p-3.5 mb-5">
+                <p className="text-[11px] font-semibold text-violet-500 mb-1">Across subjects</p>
+                <p className="text-[13px] text-violet-700 leading-relaxed">{card.interdisciplinary}</p>
               </div>
             )}
 
             {/* Next button */}
             <button
               onClick={handleNext}
-              className={`w-full max-w-xs py-4 rounded-2xl text-lg font-bold active:scale-95 transition-all shadow-lg ${
-                isCorrect ? "bg-green-600 text-white hover:bg-green-700" : "bg-red-500 text-white hover:bg-red-600"
+              className={`w-full py-[14px] rounded-[14px] text-[17px] font-semibold active:scale-[0.97] transition-all ${
+                isCorrect
+                  ? "bg-emerald-500 text-white shadow-[0_2px_12px_rgba(16,185,129,0.3)] hover:bg-emerald-600"
+                  : "bg-red-500 text-white shadow-[0_2px_12px_rgba(239,68,68,0.3)] hover:bg-red-600"
               }`}
             >
-              {currentIndex + 1 >= cards.length ? "See results" : "Next →"}
+              {currentIndex + 1 >= cards.length ? "See Results" : "Continue"}
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>
