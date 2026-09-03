@@ -99,6 +99,8 @@ const SUBJECT_COLORS: Record<string, { text: string; bg: string; border: string 
   biology: { text: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-200" },
   english: { text: "text-violet-500", bg: "bg-violet-50", border: "border-violet-200" },
   math: { text: "text-sky-500", bg: "bg-sky-50", border: "border-sky-200" },
+  french: { text: "text-rose-500", bg: "bg-rose-50", border: "border-rose-200" },
+  pe: { text: "text-amber-500", bg: "bg-amber-50", border: "border-amber-200" },
 };
 
 type Phase = "start" | "studying" | "done";
@@ -182,7 +184,7 @@ export default function StudyTab() {
         ? fetch(`/api/daily-progress?userId=${user.id}`).then(r => r.json()).catch(() => null)
         : Promise.resolve(null);
 
-      const cardsPromise = fetch("/api/smart-session?studentId=81991&mode=quick5&subject=all")
+      const cardsPromise = fetch(`/api/smart-session?userId=${user?.id || ""}&mode=quick5&subject=all`)
         .then(r => r.json()).catch(() => null);
 
       // Update daily progress as soon as it arrives

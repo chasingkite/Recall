@@ -7,7 +7,7 @@ const memCache = new Map<string, { data: any; ts: number }>();
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const studentId = searchParams.get("studentId") || "81991";
+  const userId = searchParams.get("userId") || "";
   const mode = searchParams.get("mode") || "full";
   const subject = searchParams.get("subject") || "all";
 
@@ -16,12 +16,21 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // 1. Get upcoming assignments from Canvas cache
-  const { data: cache } = await supabase
-    .from("canvas_cache")
-    .select("data")
-    .eq("student_id", studentId)
-    .single();
+  // Look up the user's Canvas student ID from their profile
+  let canvasStudentId: string | null = null;
+  if (userId) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("canvas_student_id")
+      .eq("id", userId)
+      .single();
+    canvasStudentId = profile?.canvas_student_id || null;
+  }
+
+  // 1. Get upcoming assignments from Canvas cache (only if user has Canvas)
+  const { data: cache } = canvasStudentId
+    ? await supabase.from("canvas_cache").select("data").eq("student_id", canvasStudentId).single()
+    : { data: null };
 
   const now = new Date();
   const weekFromNow = new Date(now.getTime() + 7 * 86400000);
@@ -50,11 +59,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ cards: [], assignments: [], matchedTopics: [], dueCount: 0, unseenCount: 0, totalDue: 0 });
   }
 
-  // 2b. Load FSRS state for this student
-  const { data: reviews } = await supabase
-    .from("card_reviews")
-    .select("card_id, next_review_at, reps")
-    .eq("user_id", studentId);
+  // 2b. Load FSRS state for this user
+  const { data: reviews } = userId
+    ? await supabase.from("card_reviews").select("card_id, next_review_at, reps").eq("user_id", userId)
+    : { data: null };
 
   const reviewMap = new Map<string, { next_review_at: string; reps: number }>();
   if (reviews) {
@@ -84,7 +92,7 @@ export async function GET(request: Request) {
 
   if (upcomingAssignments.length > 0) {
     const today = new Date().toISOString().split("T")[0];
-    const cacheKey = `topics_${studentId}_${today}`;
+    const cacheKey = `topics_${userId}_${today}`;
 
     // Check in-memory cache
     const cached = memCache.get(cacheKey);
