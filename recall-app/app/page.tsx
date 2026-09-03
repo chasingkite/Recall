@@ -8,6 +8,7 @@ import ProgressTab from "./components/ProgressTab";
 import RewardsTab from "./components/RewardsTab";
 import AdminTab from "./components/AdminTab";
 import AdminDashboard from "./components/AdminDashboard";
+import NotificationPrompt from "./components/NotificationPrompt";
 
 type Tab = "dashboard" | "study" | "progress" | "rewards" | "admin";
 
@@ -46,6 +47,12 @@ export default function Home() {
     loadProfile();
   }, [supabase]);
 
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
   async function signOut() {
     await supabase.auth.signOut();
     window.location.href = "/login";
@@ -76,6 +83,7 @@ export default function Home() {
       </header>
 
       <div className="flex-1 max-w-md sm:max-w-2xl lg:max-w-4xl mx-auto w-full px-4 sm:px-6 py-6">
+        {profile && <NotificationPrompt userId={profile.id} />}
         {tab === "dashboard" && isAdmin && <AdminDashboard />}
         {tab === "dashboard" && !isAdmin && hasDashboard && <DashboardTab />}
         {tab === "dashboard" && !isAdmin && !hasDashboard && <StudyTab />}
