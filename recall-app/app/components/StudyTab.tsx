@@ -9,7 +9,6 @@ import { DAILY_GOAL_CARDS } from "../lib/supabase/db-types";
 import MemoryScoreWidget from "./MemoryScoreWidget";
 import CelebrationModal from "./CelebrationModal";
 import StreakBadge from "./StreakBadge";
-import StudySheet from "./StudySheet";
 import GapAnalysisComponent from "./GapAnalysis";
 
 interface DBCard {
@@ -91,7 +90,7 @@ const SUBJECT_COLORS: Record<string, string> = {
   math: "text-blue-400",
 };
 
-type Phase = "start" | "sheet" | "studying" | "done";
+type Phase = "start" | "studying" | "done";
 
 export default function StudyTab() {
   const [phase, setPhase] = useState<Phase>("start");
@@ -127,9 +126,10 @@ export default function StudyTab() {
   const [celebrationPct, setCelebrationPct] = useState(0);
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
 
-  // Study sheet (Phase 7)
+  // Study sheet (Phase 7) — collapsible during study
   const [studySheetContent, setStudySheetContent] = useState("");
   const [sheetLoading, setSheetLoading] = useState(false);
+  const [showReviewNotes, setShowReviewNotes] = useState(false);
 
   // Explain-back (Phase 9)
   const [explainFeedback, setExplainFeedback] = useState<{
@@ -201,9 +201,7 @@ export default function StudyTab() {
   }
 
   function handleStart() {
-    // Load study sheet first (Phase 7)
-    setSheetLoading(true);
-    setPhase("sheet");
+    setPhase("studying");
     setCurrentIndex(0);
     setCorrectCount(0);
     setRequeuedCards([]);
@@ -213,7 +211,12 @@ export default function StudyTab() {
     setGapAnalysis(null);
     setSessionAnswers([]);
     setExplainFeedback(null);
+    setShowReviewNotes(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
 
+    // Fetch study sheet in background (available via "Review Notes" button)
+    setSheetLoading(true);
+    setStudySheetContent("");
     const topics = [...new Set(cards.map((c) => c.topic).filter(Boolean))];
     const fronts = cards.map((c) => c.front);
 
@@ -231,11 +234,6 @@ export default function StudyTab() {
         setStudySheetContent("");
         setSheetLoading(false);
       });
-  }
-
-  function handleStartQuiz() {
-    setPhase("studying");
-    setTimeout(() => inputRef.current?.focus(), 100);
   }
 
   async function recordFSRS(cardId: string, correct: boolean, hintWasUsed: boolean, gaveUp: boolean) {
@@ -489,11 +487,6 @@ export default function StudyTab() {
     );
   }
 
-  // STUDY SHEET PHASE (Phase 7)
-  if (phase === "sheet") {
-    return <StudySheet sheet={studySheetContent} onStartQuiz={handleStartQuiz} loading={sheetLoading} />;
-  }
-
   // START SCREEN
   if (phase === "start") {
     const progressPct = Math.min(100, Math.round((dailyCorrect / DAILY_GOAL_CARDS) * 100));
@@ -664,19 +657,54 @@ export default function StudyTab() {
 
   return (
     <div className="min-h-[80vh] flex flex-col px-4 py-4">
-      {/* Progress dots */}
-      <div className="flex gap-1 justify-center mb-6">
-        {cards.map((_, i) => (
-          <div
-            key={i}
-            className={`h-1.5 rounded-full transition-all ${
-              i < currentIndex ? "w-6 bg-blue-500" :
-              i === currentIndex ? "w-8 bg-blue-600" :
-              "w-4 bg-gray-300"
-            }`}
-          />
-        ))}
+      {/* Progress dots + Review Notes toggle */}
+      <div className="flex items-center justify-between mb-4 px-1">
+        <div className="flex gap-1">
+          {cards.map((_, i) => (
+            <div
+              key={i}
+              className={`h-1.5 rounded-full transition-all ${
+                i < currentIndex ? "w-6 bg-blue-500" :
+                i === currentIndex ? "w-8 bg-blue-600" :
+                "w-4 bg-gray-300"
+              }`}
+            />
+          ))}
+        </div>
+        <button
+          onClick={() => setShowReviewNotes(!showReviewNotes)}
+          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+            showReviewNotes
+              ? "bg-indigo-100 border-indigo-300 text-indigo-700"
+              : "bg-gray-100 border-gray-200 text-gray-500 hover:bg-gray-200"
+          }`}
+        >
+          {sheetLoading ? "📝 Loading..." : showReviewNotes ? "📝 Hide Notes" : "📝 Review Notes"}
+        </button>
       </div>
+
+      {/* Collapsible Review Notes Panel */}
+      {showReviewNotes && studySheetContent && (
+        <div className="mb-4 max-h-48 overflow-y-auto rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+          {studySheetContent.split("\n").map((line, i) => {
+            const trimmed = line.trim();
+            if (!trimmed) return null;
+            if (trimmed.startsWith("## ") || trimmed.startsWith("**")) {
+              return <p key={i} className="text-xs font-bold text-indigo-700 mt-2 mb-0.5">{trimmed.replace(/^##\s*/, "").replace(/\*\*/g, "")}</p>;
+            }
+            if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
+              return <p key={i} className="text-xs text-indigo-600 ml-2">• {trimmed.slice(2)}</p>;
+            }
+            return <p key={i} className="text-xs text-indigo-600">{trimmed}</p>;
+          })}
+        </div>
+      )}
+      {showReviewNotes && sheetLoading && (
+        <div className="mb-4 flex items-center justify-center py-4 rounded-xl border border-indigo-200 bg-indigo-50">
+          <div className="animate-spin h-4 w-4 border-2 border-indigo-500 border-t-transparent rounded-full mr-2" />
+          <span className="text-xs text-indigo-500">Generating review notes...</span>
+        </div>
+      )}
 
       {/* Card */}
       <div className="flex-1 flex flex-col items-center justify-center">

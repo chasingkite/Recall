@@ -1,6 +1,21 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+// In-memory cache as fallback (per serverless instance)
+const memCache = new Map<string, { sheet: string; ts: number }>();
+
+function cacheKey(topics: string[]): string {
+  const today = new Date().toISOString().split("T")[0];
+  const sorted = [...topics].sort().join(",");
+  return `${today}:${sorted}`;
+}
 
 export async function POST(request: Request) {
   const { topics, cardFronts } = await request.json();
@@ -13,7 +28,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "topics and cardFronts required" }, { status: 400 });
   }
 
-  const topicList = Array.isArray(topics) ? topics.join(", ") : topics;
+  const topicArr = Array.isArray(topics) ? topics : [topics];
+  const key = cacheKey(topicArr);
+
+  // Check in-memory cache first
+  const cached = memCache.get(key);
+  if (cached && Date.now() - cached.ts < 24 * 60 * 60 * 1000) {
+    return NextResponse.json({ sheet: cached.sheet, cached: true });
+  }
+
+  // Check Supabase cache (canvas_cache table, reused for study sheets)
+  try {
+    const { data: dbCache } = await supabase
+      .from("canvas_cache")
+      .select("data, updated_at")
+      .eq("student_id", `sheet_${key}`)
+      .single();
+
+    if (dbCache?.data?.sheet) {
+      const cacheAge = Date.now() - new Date(dbCache.updated_at).getTime();
+      if (cacheAge < 24 * 60 * 60 * 1000) {
+        memCache.set(key, { sheet: dbCache.data.sheet, ts: Date.now() });
+        return NextResponse.json({ sheet: dbCache.data.sheet, cached: true });
+      }
+    }
+  } catch {}
+
+  // Generate fresh
+  const topicList = topicArr.join(", ");
   const cardList = cardFronts.slice(0, 10).map((f: string, i: number) => `${i + 1}. ${f}`).join("\n");
 
   const prompt = `You are a study coach creating a quick review sheet for a 9th grade student about to take a quiz. The student takes Spanish 1, Biology, English 1, and Integrated Math 2.
@@ -49,14 +91,22 @@ Format as markdown.`;
     });
 
     if (!response.ok) {
-      const errText = await response.text();
       return NextResponse.json({ error: `API error: ${response.status}` }, { status: 500 });
     }
 
     const data = await response.json();
-    const text = data.content[0]?.text || "";
+    const sheet = data.content[0]?.text || "";
 
-    return NextResponse.json({ sheet: text });
+    // Cache to memory + Supabase
+    memCache.set(key, { sheet, ts: Date.now() });
+    try {
+      await supabase.from("canvas_cache").upsert(
+        { student_id: `sheet_${key}`, data: { sheet }, updated_at: new Date().toISOString() },
+        { onConflict: "student_id" }
+      );
+    } catch {}
+
+    return NextResponse.json({ sheet });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
