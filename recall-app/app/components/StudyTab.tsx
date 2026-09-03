@@ -49,7 +49,18 @@ function dbCardToStudyCard(c: DBCard): StudyCard {
 
 function assignVariety(cards: StudyCard[], all: StudyCard[]): StudyCard[] {
   return cards.map((card) => {
+    // If card already has valid MC choices, keep it
     if (card.answerType === "multiple-choice" && card.choices && card.choices.length > 0) return card;
+    // If card claims MC but has no choices, try to generate them or fall back to type-in
+    if (card.answerType === "multiple-choice" && (!card.choices || card.choices.length === 0)) {
+      let pool = all.filter((c) => c.id !== card.id && c.topic === card.topic && c.back !== card.back);
+      if (pool.length < 3) pool = all.filter((c) => c.id !== card.id && c.subject === card.subject && c.back !== card.back);
+      if (pool.length >= 3) {
+        const choices = [...pool.sort(() => Math.random() - 0.5).slice(0, 3).map((c) => c.back), card.back].sort(() => Math.random() - 0.5);
+        return { ...card, choices };
+      }
+      return { ...card, answerType: "type" as const };
+    }
     const rand = Math.random();
     if (rand < 0.30) {
       let pool = all.filter((c) => c.id !== card.id && c.topic === card.topic && c.back !== card.back);
