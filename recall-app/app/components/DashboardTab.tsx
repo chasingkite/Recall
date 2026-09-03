@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 import { DAILY_GOAL_CARDS } from "../lib/supabase/db-types";
+
+const CARD = "bg-white rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.08)]";
+const SEPARATOR = "border-t border-[#e5e5ea]";
+const GRADE_TARGET = 93;
 
 interface Assignment {
   name: string;
@@ -35,13 +39,16 @@ function cleanCourseName(name: string) {
   return name.split("-")[0].replace(/^\d+\s*/, "").trim();
 }
 
+function parseDateLocal(dueAt: string): Date {
+  const [year, month, day] = dueAt.split("T")[0].split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function getTimeLabel(dueAt: string | null): string {
   if (!dueAt) return "";
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dueDateStr = dueAt.split("T")[0];
-  const [year, month, day] = dueDateStr.split("-").map(Number);
-  const dueDate = new Date(year, month - 1, day);
+  const dueDate = parseDateLocal(dueAt);
 
   const diffDays = Math.round((dueDate.getTime() - startOfToday.getTime()) / 86400000);
 
@@ -53,13 +60,10 @@ function getTimeLabel(dueAt: string | null): string {
 
 function isOverdue(a: Assignment): boolean {
   if (!a.dueAt || a.status !== "unsubmitted") return false;
-  const dueDateStr = a.dueAt.split("T")[0];
-  const [year, month, day] = dueDateStr.split("-").map(Number);
-  const dueDate = new Date(year, month - 1, day);
+  const dueDate = parseDateLocal(a.dueAt);
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const daysOverdue = Math.round((startOfToday.getTime() - dueDate.getTime()) / 86400000);
-  // Only show as overdue if < 14 days past due (older = stale)
   return daysOverdue > 0 && daysOverdue <= 14;
 }
 
@@ -68,9 +72,7 @@ function isDueThisWeek(a: Assignment): boolean {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const endOfWeek = new Date(startOfToday.getTime() + 7 * 86400000);
-  const dueDateStr = a.dueAt.split("T")[0];
-  const [year, month, day] = dueDateStr.split("-").map(Number);
-  const dueDate = new Date(year, month - 1, day);
+  const dueDate = parseDateLocal(a.dueAt);
   return dueDate >= startOfToday && dueDate < endOfWeek;
 }
 
@@ -91,7 +93,6 @@ export default function DashboardTab() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [dailyCorrect, setDailyCorrect] = useState(0);
-  const [dailyGoalMet, setDailyGoalMet] = useState(false);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [userName, setUserName] = useState("Hailey");
   const [customTests, setCustomTests] = useState<CustomTest[]>([]);
@@ -101,17 +102,33 @@ export default function DashboardTab() {
   const [newTestDate, setNewTestDate] = useState("");
   const [newTestTopics, setNewTestTopics] = useState("");
   const supabase = createClient();
+  const userIdRef = useRef<string | null>(null);
+
+  const dailyGoalMet = dailyCorrect >= DAILY_GOAL_CARDS;
 
   useEffect(() => {
     loadDashboard();
   }, []);
 
+  async function persistCanvasCache(key: string, data: unknown) {
+    const userId = userIdRef.current;
+    if (!userId) return;
+    try {
+      await supabase.from("canvas_cache").upsert(
+        { student_id: `${key}_${userId}`, data, updated_at: new Date().toISOString() },
+        { onConflict: "student_id" }
+      );
+    } catch (e) {
+      console.error("canvas_cache upsert failed:", e);
+    }
+  }
+
   async function loadDashboard() {
     setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
+    userIdRef.current = user?.id ?? null;
 
-    // Load all in parallel
     const [canvasRes, profileRes, progressRes, dismissedRes, testsRes] = await Promise.all([
       fetch("/api/canvas-sync?studentId=81991").then(r => r.json()).catch(() => ({ data: [] })),
       user ? supabase.from("profiles").select("display_name").eq("id", user.id).single() : Promise.resolve({ data: null }),
@@ -124,7 +141,6 @@ export default function DashboardTab() {
     if (profileRes.data?.display_name) setUserName(profileRes.data.display_name.split(" ")[0]);
     if (progressRes) {
       setDailyCorrect(progressRes.cards_correct || 0);
-      setDailyGoalMet(progressRes.goal_met || false);
     }
     if (dismissedRes.data?.data?.ids) {
       setDismissedIds(new Set(dismissedRes.data.data.ids));
@@ -140,36 +156,12 @@ export default function DashboardTab() {
     return `${a.courseId}_${a.name}`;
   }
 
-  async function dismissAssignment(a: Assignment) {
+  function toggleDismiss(a: Assignment, dismiss: boolean) {
     const key = assignmentKey(a);
     const newSet = new Set(dismissedIds);
-    newSet.add(key);
+    dismiss ? newSet.add(key) : newSet.delete(key);
     setDismissedIds(newSet);
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    try {
-      await supabase.from("canvas_cache").upsert(
-        { student_id: `dismissed_${user.id}`, data: { ids: [...newSet] }, updated_at: new Date().toISOString() },
-        { onConflict: "student_id" }
-      );
-    } catch {}
-  }
-
-  async function undoDismiss(a: Assignment) {
-    const key = assignmentKey(a);
-    const newSet = new Set(dismissedIds);
-    newSet.delete(key);
-    setDismissedIds(newSet);
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    try {
-      await supabase.from("canvas_cache").upsert(
-        { student_id: `dismissed_${user.id}`, data: { ids: [...newSet] }, updated_at: new Date().toISOString() },
-        { onConflict: "student_id" }
-      );
-    } catch {}
+    persistCanvasCache("dismissed", { ids: [...newSet] });
   }
 
   async function addCustomTest() {
@@ -188,29 +180,13 @@ export default function DashboardTab() {
     setNewTestSubject("");
     setNewTestDate("");
     setNewTestTopics("");
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    try {
-      await supabase.from("canvas_cache").upsert(
-        { student_id: `tests_${user.id}`, data: { tests: updated }, updated_at: new Date().toISOString() },
-        { onConflict: "student_id" }
-      );
-    } catch {}
+    persistCanvasCache("tests", { tests: updated });
   }
 
-  async function removeCustomTest(testId: string) {
+  function removeCustomTest(testId: string) {
     const updated = customTests.filter(t => t.id !== testId);
     setCustomTests(updated);
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    try {
-      await supabase.from("canvas_cache").upsert(
-        { student_id: `tests_${user.id}`, data: { tests: updated }, updated_at: new Date().toISOString() },
-        { onConflict: "student_id" }
-      );
-    } catch {}
+    persistCanvasCache("tests", { tests: updated });
   }
 
   if (loading) {
@@ -224,7 +200,6 @@ export default function DashboardTab() {
   const allAssignments = courses.flatMap(c => c.assignments);
   const currentYear = new Date().getFullYear();
 
-  // Filter out stale assignments and dismissed ones
   const activeAssignments = allAssignments.filter(a => {
     if (!a.dueAt) return false;
     const year = parseInt(a.dueAt.split("-")[0]);
@@ -234,30 +209,9 @@ export default function DashboardTab() {
 
   const overdue = activeAssignments.filter(a => isOverdue(a) && !dismissedIds.has(assignmentKey(a)));
   const dueThisWeek = activeAssignments.filter(a => isDueThisWeek(a) && !isOverdue(a) && !dismissedIds.has(assignmentKey(a)));
-
-  // Paper assignments that are past due — show with "Done" button
-  const paperPastDue = activeAssignments.filter(a => {
-    if (a.submissionType !== "on_paper" || a.status !== "unsubmitted" || !a.dueAt) return false;
-    if (dismissedIds.has(assignmentKey(a))) return false;
-    const dueDateStr = a.dueAt.split("T")[0];
-    const [year, month, day] = dueDateStr.split("-").map(Number);
-    const dueDate = new Date(year, month - 1, day);
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const daysOverdue = Math.round((startOfToday.getTime() - dueDate.getTime()) / 86400000);
-    return daysOverdue > 0 && daysOverdue <= 14;
-  });
-
-  // Online overdue (exclude paper — those go in paperPastDue with "Done" button)
-  const onlineOverdue = overdue.filter(a => a.submissionType !== "on_paper");
-
-  // Recently dismissed (for undo)
   const recentlyDismissed = activeAssignments.filter(a => dismissedIds.has(assignmentKey(a))).slice(0, 3);
-
-  const needsAttention = overdue.filter(a => !dismissedIds.has(assignmentKey(a)));
   const progressPct = Math.min(100, Math.round((dailyCorrect / DAILY_GOAL_CARDS) * 100));
 
-  // Upcoming tests/projects: auto-detected from Canvas + custom
   const now = new Date();
   const monthOut = new Date(now.getTime() + 30 * 86400000);
   const canvasTests = activeAssignments.filter(a => {
@@ -267,11 +221,8 @@ export default function DashboardTab() {
     return isTestOrProject(a);
   }).sort((a, b) => (a.dueAt || "").localeCompare(b.dueAt || ""));
 
-  // Filter out past custom tests
   const todayStr = now.toISOString().split("T")[0];
   const activeCustomTests = customTests.filter(t => t.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date));
-
-  // Grades sorted: lowest first (needs attention)
   const sortedCourses = [...courses].sort((a, b) => (a.score ?? 100) - (b.score ?? 100));
 
   return (
@@ -280,26 +231,24 @@ export default function DashboardTab() {
         <h1 className="text-[28px] font-bold text-gray-900 tracking-tight">{getGreeting()}, {userName}</h1>
       </div>
 
-      {/* Needs Attention */}
-      {needsAttention.length > 0 && (
+      {overdue.length > 0 && (
         <div className="mb-4">
-          <p className="text-[13px] font-medium text-gray-500 px-1 mb-1.5">{needsAttention.length} item{needsAttention.length > 1 ? "s" : ""} need attention</p>
-          <div className="bg-white rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.08)] overflow-hidden">
-            {needsAttention.map((a, i) => (
-              <div key={assignmentKey(a) + i} className={`flex items-center px-4 py-[13px] ${i > 0 ? "border-t border-[#e5e5ea]" : ""}`}>
+          <p className="text-[13px] font-medium text-gray-500 px-1 mb-1.5">{overdue.length} item{overdue.length > 1 ? "s" : ""} need attention</p>
+          <div className={`${CARD} overflow-hidden`}>
+            {overdue.map((a, i) => (
+              <div key={assignmentKey(a) + i} className={`flex items-center px-4 py-[13px] ${i > 0 ? SEPARATOR : ""}`}>
                 <div className="w-[6px] h-[6px] rounded-full bg-red-400 shrink-0 mr-3" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[15px] text-gray-900 truncate">{a.name}</p>
                   <p className="text-[13px] text-gray-500 mt-0.5">{cleanCourseName(a.courseName)} · <span className="text-red-400">{getTimeLabel(a.dueAt)}</span></p>
                 </div>
-                <button onClick={() => dismissAssignment(a)} className="shrink-0 ml-3 text-[15px] font-normal text-[#34c759] active:opacity-50">Done</button>
+                <button onClick={() => toggleDismiss(a, true)} className="shrink-0 ml-3 text-[13px] font-medium text-[#34c759] bg-[#34c759]/10 px-3 py-1 rounded-full active:opacity-50">Done</button>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Upcoming Tests */}
       <div className="mb-4">
         <div className="flex items-center justify-between px-1 mb-1.5">
           <p className="text-[13px] font-medium text-gray-500">Upcoming Tests</p>
@@ -307,7 +256,7 @@ export default function DashboardTab() {
         </div>
 
         {showAddTest && (
-          <div className="bg-white rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.08)] p-4 mb-2">
+          <div className={`${CARD} p-4 mb-2`}>
             <input type="text" value={newTestName} onChange={e => setNewTestName(e.target.value)} placeholder="Test name (e.g., Spanish Quiz Ch.3)" className="w-full px-3 py-[10px] rounded-[8px] bg-[#f2f2f7] text-[15px] mb-2 outline-none" />
             <div className="flex gap-2 mb-2">
               <input type="text" value={newTestSubject} onChange={e => setNewTestSubject(e.target.value)} placeholder="Subject" className="flex-1 px-3 py-[10px] rounded-[8px] bg-[#f2f2f7] text-[15px] outline-none" />
@@ -318,11 +267,11 @@ export default function DashboardTab() {
           </div>
         )}
 
-        <div className="bg-white rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.08)] overflow-hidden">
+        <div className={`${CARD} overflow-hidden`}>
           {canvasTests.map((a, i) => {
             const daysUntil = Math.round((new Date(a.dueAt!).getTime() - now.getTime()) / 86400000);
             return (
-              <div key={`canvas-${i}`} className={`flex items-center px-4 py-[13px] ${i > 0 ? "border-t border-[#e5e5ea]" : ""}`}>
+              <div key={`canvas-${i}`} className={`flex items-center px-4 py-[13px] ${i > 0 ? SEPARATOR : ""}`}>
                 <div className="w-[6px] h-[6px] rounded-full bg-[#5856d6] shrink-0 mr-3" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[15px] text-gray-900 truncate">{a.name}</p>
@@ -337,7 +286,7 @@ export default function DashboardTab() {
           {activeCustomTests.map((t, i) => {
             const daysUntil = Math.round((new Date(t.date).getTime() - now.getTime()) / 86400000) + 1;
             return (
-              <div key={t.id} className={`flex items-center px-4 py-[13px] ${(i > 0 || canvasTests.length > 0) ? "border-t border-[#e5e5ea]" : ""}`}>
+              <div key={t.id} className={`flex items-center px-4 py-[13px] ${(i > 0 || canvasTests.length > 0) ? SEPARATOR : ""}`}>
                 <div className="w-[6px] h-[6px] rounded-full bg-[#5856d6] shrink-0 mr-3" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[15px] text-gray-900 truncate">{t.name}</p>
@@ -358,18 +307,17 @@ export default function DashboardTab() {
         </div>
       </div>
 
-      {/* Due This Week */}
       {dueThisWeek.length > 0 && (
         <div className="mb-4">
           <p className="text-[13px] font-medium text-gray-500 px-1 mb-1.5">Due This Week</p>
-          <div className="bg-white rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.08)] overflow-hidden">
+          <div className={`${CARD} overflow-hidden`}>
             {dueThisWeek.map((a, i) => (
-              <div key={assignmentKey(a) + i} className={`flex items-center px-4 py-[13px] ${i > 0 ? "border-t border-[#e5e5ea]" : ""}`}>
+              <div key={assignmentKey(a) + i} className={`flex items-center px-4 py-[13px] ${i > 0 ? SEPARATOR : ""}`}>
                 <div className="min-w-0 flex-1">
                   <p className="text-[15px] text-gray-900 truncate">{a.name}</p>
                   <p className="text-[13px] text-gray-500 mt-0.5">{cleanCourseName(a.courseName)}</p>
                 </div>
-                <button onClick={() => dismissAssignment(a)} className="shrink-0 ml-2 text-[15px] font-normal text-[#34c759] active:opacity-50">Done</button>
+                <button onClick={() => toggleDismiss(a, true)} className="shrink-0 ml-2 text-[13px] font-medium text-[#34c759] bg-[#34c759]/10 px-3 py-1 rounded-full active:opacity-50">Done</button>
                 <span className="shrink-0 ml-3 text-[13px] text-gray-400">{getTimeLabel(a.dueAt)}</span>
               </div>
             ))}
@@ -377,22 +325,21 @@ export default function DashboardTab() {
         </div>
       )}
 
-      {needsAttention.length === 0 && dueThisWeek.length === 0 && (
-        <div className="bg-white rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.08)] p-5 mb-4 text-center">
+      {overdue.length === 0 && dueThisWeek.length === 0 && (
+        <div className={`${CARD} p-5 mb-4 text-center`}>
           <p className="text-[17px] font-semibold text-gray-900">All caught up</p>
           <p className="text-[13px] text-gray-500 mt-0.5">No assignments due this week</p>
         </div>
       )}
 
-      {/* Grades */}
       <div className="mb-4">
         <p className="text-[13px] font-medium text-gray-500 px-1 mb-1.5">Grades</p>
         <div className="grid grid-cols-3 gap-2">
           {sortedCourses.map((c) => {
-            const needsWork = c.score !== null && c.score < 93;
-            const gap = needsWork ? (93 - (c.score || 0)).toFixed(1) : null;
+            const needsWork = c.score !== null && c.score < GRADE_TARGET;
+            const gap = needsWork ? (GRADE_TARGET - (c.score || 0)).toFixed(1) : null;
             return (
-              <div key={c.id} className="bg-white rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.08)] p-3 flex flex-col items-center">
+              <div key={c.id} className={`${CARD} p-3 flex flex-col items-center`}>
                 <span className={`text-[22px] font-bold tabular-nums ${needsWork ? "text-[#ff9500]" : "text-gray-900"}`}>{c.grade || "--"}</span>
                 {c.score !== null && <span className="text-[11px] text-gray-400 tabular-nums">{c.score}%</span>}
                 <span className="text-[11px] text-gray-500 font-medium mt-1 text-center leading-tight">{cleanCourseName(c.name)}</span>
@@ -403,10 +350,9 @@ export default function DashboardTab() {
         </div>
       </div>
 
-      {/* Daily Goal */}
       <div className="mb-4">
         <p className="text-[13px] font-medium text-gray-500 px-1 mb-1.5">Today&apos;s Study Goal</p>
-        <div className="bg-white rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.08)] p-4">
+        <div className={`${CARD} p-4`}>
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-[15px] text-gray-900">Cards Mastered</span>
             <span className={`text-[15px] font-bold tabular-nums ${dailyGoalMet ? "text-[#34c759]" : "text-gray-900"}`}>{dailyCorrect} / {DAILY_GOAL_CARDS}</span>
@@ -418,15 +364,14 @@ export default function DashboardTab() {
         </div>
       </div>
 
-      {/* Marked as Done */}
       {recentlyDismissed.length > 0 && (
         <div className="mb-4">
           <p className="text-[13px] font-medium text-gray-400 px-1 mb-1.5">Marked as Done</p>
-          <div className="bg-white rounded-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.08)] overflow-hidden">
+          <div className={`${CARD} overflow-hidden`}>
             {recentlyDismissed.map((a, i) => (
-              <div key={assignmentKey(a) + i} className={`flex items-center px-4 py-[11px] ${i > 0 ? "border-t border-[#e5e5ea]" : ""}`}>
+              <div key={assignmentKey(a) + i} className={`flex items-center px-4 py-[11px] ${i > 0 ? SEPARATOR : ""}`}>
                 <span className="text-[15px] text-gray-400 line-through truncate flex-1">{a.name}</span>
-                <button onClick={() => undoDismiss(a)} className="shrink-0 ml-2 text-[15px] font-normal text-[#007aff] active:opacity-50">Undo</button>
+                <button onClick={() => toggleDismiss(a, false)} className="shrink-0 ml-2 text-[15px] font-normal text-[#007aff] active:opacity-50">Undo</button>
               </div>
             ))}
           </div>
