@@ -10,6 +10,8 @@ const SUBJECT_STYLES: Record<string, { bg: string; text: string; ring: string }>
   biology: { bg: "bg-emerald-50", text: "text-emerald-600", ring: "stroke-emerald-400" },
   english: { bg: "bg-violet-50", text: "text-violet-600", ring: "stroke-violet-400" },
   math: { bg: "bg-sky-50", text: "text-sky-600", ring: "stroke-sky-400" },
+  french: { bg: "bg-rose-50", text: "text-rose-600", ring: "stroke-rose-400" },
+  pe: { bg: "bg-amber-50", text: "text-amber-600", ring: "stroke-amber-400" },
 };
 
 function AccuracyRing({ percent }: { percent: number }) {
@@ -79,6 +81,7 @@ export default function ProgressTab() {
   const [subjectData, setSubjectData] = useState<Record<string, { reviewed: number; correct: number }>>({});
   const [lastStudied, setLastStudied] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [subjects, setSubjects] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -92,11 +95,10 @@ export default function ProgressTab() {
     if (!user) { setLoading(false); return; }
     setUserId(user.id);
 
-    const { data: sessions } = await supabase
-      .from("study_sessions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    const [{ data: profile }, { data: sessions }] = await Promise.all([
+      supabase.from("profiles").select("subjects").eq("id", user.id).single(),
+      supabase.from("study_sessions").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+    ]);
 
     const all = sessions || [];
     const reviewed = all.reduce((s, r: any) => s + (r.cards_reviewed || 0), 0);
@@ -120,11 +122,16 @@ export default function ProgressTab() {
       .filter((s: any) => new Date(s.created_at) >= weekAgo)
       .reduce((sum, s: any) => sum + (s.cards_reviewed || 0), 0);
 
+    const profileSubjects: string[] = profile?.subjects || [];
+    const sessionSubjects = Object.keys(breakdown);
+    const allSubjects = [...new Set([...profileSubjects, ...sessionSubjects])].map(s => s.toLowerCase());
+
     setTotalSessions(all.length);
     setTotalReviewed(reviewed);
     setTotalCorrect(correct);
     setThisWeekCards(week);
     setSubjectData(breakdown);
+    setSubjects(allSubjects);
     setLastStudied(all.length > 0 ? all[0].created_at : null);
     setLoading(false);
   }
@@ -138,7 +145,6 @@ export default function ProgressTab() {
   }
 
   const accuracy = totalReviewed > 0 ? Math.round((totalCorrect / totalReviewed) * 100) : 0;
-  const subjects = ["spanish", "biology", "english", "math"];
 
   return (
     <div className="w-full">
