@@ -1,2 +1,4 @@
 recall-app/.idea/
 .next/
+.env.local
+recall-app/.env.local
