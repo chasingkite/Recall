@@ -1,0 +1,26 @@
+name: Daily Crons
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-crons:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Canvas Sync
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://chasingkite.com/api/cron/canvas-sync
+      - name: Wait for Canvas data
+        run: sleep 10
+      - name: Topic Match
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://chasingkite.com/api/cron/topic-match
+      - name: Wait for topic matching
+        run: sleep 10
+      - name: Assign Topics
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://chasingkite.com/api/cron/assign-topics
