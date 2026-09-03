@@ -169,23 +169,32 @@ export default function StudyTab() {
   }, []);
 
   async function loadSession() {
-    setLoading(true);
+    // Show start screen immediately — don't block on loading
+    setLoading(false);
+
     try {
-      // Get user
+      // Get user (fast — cached by Supabase)
       const { data: { user } } = await supabase.auth.getUser();
       if (user) setUserId(user.id);
 
-      // Load daily progress
-      if (user) {
-        const progressRes = await fetch(`/api/daily-progress?userId=${user.id}`);
-        const progress = await progressRes.json();
+      // Load daily progress and cards in parallel
+      const progressPromise = user
+        ? fetch(`/api/daily-progress?userId=${user.id}`).then(r => r.json()).catch(() => null)
+        : Promise.resolve(null);
+
+      const cardsPromise = fetch("/api/smart-session?studentId=81991&mode=quick5&subject=all")
+        .then(r => r.json()).catch(() => null);
+
+      // Update daily progress as soon as it arrives
+      const progress = await progressPromise;
+      if (progress) {
         setDailyCorrect(progress.cards_correct || 0);
         setDailyGoalMet(progress.goal_met || false);
       }
 
-      const res = await fetch("/api/smart-session?studentId=81991&mode=quick5&subject=all");
-      const data = await res.json();
-      if (data.cards && data.cards.length > 0) {
+      // Update cards as soon as they arrive
+      const data = await cardsPromise;
+      if (data?.cards?.length > 0) {
         const studyCards = (data.cards as DBCard[]).map(dbCardToStudyCard);
         const allPool = data.allCards ? (data.allCards as DBCard[]).map(dbCardToStudyCard) : studyCards;
         const varied = assignVariety(studyCards, allPool);
@@ -195,6 +204,7 @@ export default function StudyTab() {
           setStudyReason(data.assignments[0].name);
         }
       } else {
+        // Fallback: load cards directly from Supabase
         const { data: dbCards } = await supabase.from("cards").select("*, decks(subject)").limit(50);
         if (dbCards && dbCards.length > 0) {
           const all = (dbCards as unknown as DBCard[]).map(dbCardToStudyCard);
@@ -204,15 +214,17 @@ export default function StudyTab() {
         }
       }
     } catch {
-      const { data: dbCards } = await supabase.from("cards").select("*, decks(subject)").limit(50);
-      if (dbCards && dbCards.length > 0) {
-        const all = (dbCards as unknown as DBCard[]).map(dbCardToStudyCard);
-        const session = all.sort(() => Math.random() - 0.5).slice(0, 5);
-        setCards(assignVariety(session, all));
-        setTotalCards(dbCards.length);
-      }
+      // Fallback
+      try {
+        const { data: dbCards } = await supabase.from("cards").select("*, decks(subject)").limit(50);
+        if (dbCards && dbCards.length > 0) {
+          const all = (dbCards as unknown as DBCard[]).map(dbCardToStudyCard);
+          const session = all.sort(() => Math.random() - 0.5).slice(0, 5);
+          setCards(assignVariety(session, all));
+          setTotalCards(dbCards.length);
+        }
+      } catch {}
     }
-    setLoading(false);
   }
 
   function handleStart() {

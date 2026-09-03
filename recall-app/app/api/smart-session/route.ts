@@ -3,10 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 
+const memCache = new Map<string, { data: any; ts: number }>();
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const studentId = searchParams.get("studentId") || "81991";
-  const mode = searchParams.get("mode") || "full"; // "quick5" or "full"
+  const mode = searchParams.get("mode") || "full";
   const subject = searchParams.get("subject") || "all";
 
   const supabase = createClient(
@@ -45,10 +47,10 @@ export async function GET(request: Request) {
   }
   const { data: cards } = await cardQuery;
   if (!cards || cards.length === 0) {
-    return NextResponse.json({ cards: [], assignments: [], matchedTopics: [] });
+    return NextResponse.json({ cards: [], assignments: [], matchedTopics: [], dueCount: 0, unseenCount: 0, totalDue: 0 });
   }
 
-  // 2b. Load FSRS state for this student to prioritize due cards
+  // 2b. Load FSRS state for this student
   const { data: reviews } = await supabase
     .from("card_reviews")
     .select("card_id, next_review_at, reps")
@@ -62,8 +64,6 @@ export async function GET(request: Request) {
   }
 
   const nowStr = new Date().toISOString();
-
-  // Separate cards into: due (FSRS says review now), unseen (never reviewed), and not-yet-due
   const dueCards: any[] = [];
   const unseenCards: any[] = [];
   const notDueCards: any[] = [];
@@ -79,15 +79,44 @@ export async function GET(request: Request) {
     }
   }
 
-  // 3. Match assignments to card topics using AI
+  // 3. Match assignments to card topics — cached per day
   let matchedTopics: string[] = [];
 
-  if (upcomingAssignments.length > 0 && ANTHROPIC_API_KEY) {
-    const allTopics = [...new Set(cards.map((c: any) => c.topic).filter(Boolean))];
-    const assignmentList = upcomingAssignments.map((a, i) => `${i + 1}. "${a.name}" (${a.courseName})`).join("\n");
-    const topicList = allTopics.join(", ");
+  if (upcomingAssignments.length > 0) {
+    const today = new Date().toISOString().split("T")[0];
+    const cacheKey = `topics_${studentId}_${today}`;
 
-    const prompt = `Match these upcoming school assignments to the most relevant flashcard topics.
+    // Check in-memory cache
+    const cached = memCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < 24 * 60 * 60 * 1000) {
+      matchedTopics = cached.data;
+    } else {
+      // Check Supabase cache
+      let fromDb = false;
+      try {
+        const { data: dbCache } = await supabase
+          .from("canvas_cache")
+          .select("data, updated_at")
+          .eq("student_id", cacheKey)
+          .single();
+
+        if (dbCache?.data?.matchedTopics) {
+          const age = Date.now() - new Date(dbCache.updated_at).getTime();
+          if (age < 24 * 60 * 60 * 1000) {
+            matchedTopics = dbCache.data.matchedTopics;
+            memCache.set(cacheKey, { data: matchedTopics, ts: Date.now() });
+            fromDb = true;
+          }
+        }
+      } catch {}
+
+      // Generate fresh with Claude (only if not cached and API key available)
+      if (!fromDb && ANTHROPIC_API_KEY) {
+        const allTopics = [...new Set(cards.map((c: any) => c.topic).filter(Boolean))];
+        const assignmentList = upcomingAssignments.map((a, i) => `${i + 1}. "${a.name}" (${a.courseName})`).join("\n");
+        const topicList = allTopics.join(", ");
+
+        const prompt = `Match these upcoming school assignments to the most relevant flashcard topics.
 
 Assignments due this week:
 ${assignmentList}
@@ -99,33 +128,42 @@ For each assignment, list which topics are relevant. Respond with ONLY a JSON ar
 
 Only include topics that directly relate to the assignments. If no topics match, return [].`;
 
-    try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 300,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
+        try {
+          const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": ANTHROPIC_API_KEY,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model: "claude-haiku-4-5-20251001",
+              max_tokens: 300,
+              messages: [{ role: "user", content: prompt }],
+            }),
+          });
 
-      if (response.ok) {
-        const data = await response.json();
-        let text = data.content[0]?.text || "[]";
-        text = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-        matchedTopics = JSON.parse(text);
+          if (response.ok) {
+            const data = await response.json();
+            let text = data.content[0]?.text || "[]";
+            text = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+            matchedTopics = JSON.parse(text);
+          }
+        } catch {}
+
+        // Cache to memory + Supabase
+        memCache.set(cacheKey, { data: matchedTopics, ts: Date.now() });
+        try {
+          await supabase.from("canvas_cache").upsert(
+            { student_id: cacheKey, data: { matchedTopics }, updated_at: new Date().toISOString() },
+            { onConflict: "student_id" }
+          );
+        } catch {}
       }
-    } catch {
-      // Fall back to no matching
     }
   }
 
-  // 4. Build session: prioritize (1) due cards in matched topics, (2) other due cards, (3) unseen cards
+  // 4. Build session
   const priorityDue: any[] = [];
   const normalDue: any[] = [];
   const priorityUnseen: any[] = [];
@@ -147,7 +185,6 @@ Only include topics that directly relate to the assignments. If no topics match,
     }
   }
 
-  // Shuffle each pool
   priorityDue.sort(() => Math.random() - 0.5);
   normalDue.sort(() => Math.random() - 0.5);
   priorityUnseen.sort(() => Math.random() - 0.5);
@@ -155,7 +192,6 @@ Only include topics that directly relate to the assignments. If no topics match,
 
   const sessionSize = mode === "quick5" ? 5 : 20;
 
-  // Fill session: priority due → normal due → priority unseen → normal unseen
   const sessionCards: any[] = [];
   const pools = [priorityDue, normalDue, priorityUnseen, normalUnseen];
   for (const pool of pools) {
@@ -166,7 +202,6 @@ Only include topics that directly relate to the assignments. If no topics match,
     if (sessionCards.length >= sessionSize) break;
   }
 
-  // If still not enough, add from not-due cards
   if (sessionCards.length < sessionSize) {
     notDueCards.sort(() => Math.random() - 0.5);
     for (const card of notDueCards) {
@@ -175,10 +210,8 @@ Only include topics that directly relate to the assignments. If no topics match,
     }
   }
 
-  // Shuffle final session
   sessionCards.sort(() => Math.random() - 0.5);
 
-  // Also return ALL cards for MC distractor generation
   const allCardsForDistractors = cards.slice(0, 100);
 
   return NextResponse.json({
