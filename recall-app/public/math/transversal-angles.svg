@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <rect width="400" height="300" fill="#fff"/>
+  <!-- Parallel lines -->
+  <line x1="50" y1="80" x2="350" y2="80" stroke="#3b82f6" stroke-width="2.5"/>
+  <line x1="50" y1="200" x2="350" y2="200" stroke="#3b82f6" stroke-width="2.5"/>
+  <text x="355" y="85" font-size="11" fill="#3b82f6" font-weight="bold">l₁</text>
+  <text x="355" y="205" font-size="11" fill="#3b82f6" font-weight="bold">l₂</text>
+  <!-- Transversal -->
+  <line x1="120" y1="20" x2="280" y2="270" stroke="#ef4444" stroke-width="2.5"/>
+  <text x="285" y="268" font-size="11" fill="#ef4444" font-weight="bold">t</text>
+  <!-- Angle marks at intersection 1 (top) -->
+  <text x="185" y="72" font-size="10" fill="#16a34a" font-weight="bold">1</text>
+  <text x="170" y="58" font-size="10" fill="#9333ea" font-weight="bold">2</text>
+  <text x="145" y="72" font-size="10" fill="#f97316" font-weight="bold">3</text>
+  <text x="150" y="95" font-size="10" fill="#0891b2" font-weight="bold">4</text>
+  <text x="170" y="100" font-size="10" fill="#dc2626" font-weight="bold">5</text>
+  <!-- Angle marks at intersection 2 (bottom) -->
+  <text x="225" y="192" font-size="10" fill="#f97316" font-weight="bold">3'</text>
+  <text x="210" y="178" font-size="10" fill="#16a34a" font-weight="bold">1'</text>
+  <text x="195" y="192" font-size="10" fill="#9333ea" font-weight="bold">2'</text>
+  <text x="200" y="215" font-size="10" fill="#dc2626" font-weight="bold">5'</text>
+  <text x="215" y="220" font-size="10" fill="#0891b2" font-weight="bold">4'</text>
+  <!-- Parallel markers -->
+  <line x1="195" y1="76" x2="200" y2="84" stroke="#3b82f6" stroke-width="1.5"/>
+  <line x1="200" y1="76" x2="205" y2="84" stroke="#3b82f6" stroke-width="1.5"/>
+  <line x1="195" y1="196" x2="200" y2="204" stroke="#3b82f6" stroke-width="1.5"/>
+  <line x1="200" y1="196" x2="205" y2="204" stroke="#3b82f6" stroke-width="1.5"/>
+  <!-- Legend box -->
+  <rect x="10" y="235" width="380" height="60" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" rx="6"/>
+  <text x="105" y="253" font-size="10" fill="#16a34a" text-anchor="middle" font-weight="bold">Corresponding: ≅</text>
+  <text x="105" y="266" font-size="9" fill="#6b7280" text-anchor="middle">(F-shape) 1↔1'</text>
+  <text x="200" y="253" font-size="10" fill="#9333ea" text-anchor="middle" font-weight="bold">Alt Interior: ≅</text>
+  <text x="200" y="266" font-size="9" fill="#6b7280" text-anchor="middle">(Z-shape) 2↔3'</text>
+  <text x="305" y="253" font-size="10" fill="#f97316" text-anchor="middle" font-weight="bold">Alt Exterior: ≅</text>
+  <text x="305" y="266" font-size="9" fill="#6b7280" text-anchor="middle">(Z-shape) 3↔2'</text>
+  <text x="200" y="285" font-size="10" fill="#dc2626" text-anchor="middle" font-weight="bold">Same-side Interior: supplementary (add to 180°)</text>
+  <!-- Title -->
+  <text x="200" y="18" font-size="13" fill="#1f2937" text-anchor="middle" font-weight="bold">Parallel Lines Cut by a Transversal</text>
+</svg>

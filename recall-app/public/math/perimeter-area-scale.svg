@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280">
+  <rect width="400" height="280" fill="#fff"/>
+  <!-- Perimeter section -->
+  <text x="100" y="25" font-size="14" fill="#1f2937" text-anchor="middle" font-weight="bold">Perimeter × k</text>
+  <!-- Original square -->
+  <rect x="30" y="40" width="60" height="60" fill="rgba(59,130,246,0.15)" stroke="#3b82f6" stroke-width="2"/>
+  <text x="60" y="75" font-size="11" fill="#3b82f6" text-anchor="middle">3</text>
+  <text x="60" y="115" font-size="9" fill="#6b7280" text-anchor="middle">P = 12</text>
+  <!-- Arrow -->
+  <text x="120" y="75" font-size="14" fill="#f97316" text-anchor="middle">→</text>
+  <text x="120" y="90" font-size="9" fill="#f97316" text-anchor="middle">k = 2</text>
+  <!-- Dilated square -->
+  <rect x="140" y="10" width="120" height="120" fill="rgba(34,197,94,0.1)" stroke="#22c55e" stroke-width="2"/>
+  <text x="200" y="75" font-size="11" fill="#22c55e" text-anchor="middle">6</text>
+  <text x="200" y="145" font-size="9" fill="#6b7280" text-anchor="middle">P = 24 (× 2)</text>
+
+  <!-- Divider -->
+  <line x1="0" y1="155" x2="400" y2="155" stroke="#e5e7eb" stroke-width="1"/>
+
+  <!-- Area section -->
+  <text x="100" y="175" font-size="14" fill="#1f2937" text-anchor="middle" font-weight="bold">Area × k²</text>
+  <!-- Original square -->
+  <rect x="40" y="190" width="50" height="50" fill="rgba(59,130,246,0.15)" stroke="#3b82f6" stroke-width="2"/>
+  <text x="65" y="220" font-size="10" fill="#3b82f6" text-anchor="middle">3</text>
+  <text x="65" y="255" font-size="9" fill="#6b7280" text-anchor="middle">A = 9</text>
+  <!-- Arrow -->
+  <text x="120" y="220" font-size="14" fill="#f97316" text-anchor="middle">→</text>
+  <text x="120" y="235" font-size="9" fill="#f97316" text-anchor="middle">k = 2</text>
+  <!-- Dilated square with grid showing 4× -->
+  <rect x="145" y="185" width="100" height="100" fill="rgba(34,197,94,0.1)" stroke="#22c55e" stroke-width="2"/>
+  <line x1="195" y1="185" x2="195" y2="285" stroke="#22c55e" stroke-width="0.8" stroke-dasharray="3,3"/>
+  <line x1="145" y1="235" x2="245" y2="235" stroke="#22c55e" stroke-width="0.8" stroke-dasharray="3,3"/>
+  <text x="195" y="240" font-size="10" fill="#22c55e" text-anchor="middle">6</text>
+  <text x="195" y="270" font-size="9" fill="#6b7280" text-anchor="middle">A = 36 (× 4 = k²)</text>
+
+  <!-- Key insight box -->
+  <rect x="270" y="40" width="120" height="100" fill="#fef3c7" stroke="#f59e0b" stroke-width="1" rx="8"/>
+  <text x="330" y="62" font-size="11" fill="#92400e" text-anchor="middle" font-weight="bold">Key Rules</text>
+  <text x="330" y="82" font-size="10" fill="#92400e" text-anchor="middle">Perimeter → ×k</text>
+  <text x="330" y="100" font-size="10" fill="#92400e" text-anchor="middle">Area → ×k²</text>
+  <text x="330" y="118" font-size="10" fill="#92400e" text-anchor="middle">Volume → ×k³</text>
+
+  <!-- Similar vs Congruent box -->
+  <rect x="270" y="180" width="120" height="90" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1" rx="8"/>
+  <text x="330" y="200" font-size="11" fill="#5b21b6" text-anchor="middle" font-weight="bold">Similar vs Congruent</text>
+  <text x="330" y="218" font-size="9" fill="#5b21b6" text-anchor="middle">Similar: same shape</text>
+  <text x="330" y="232" font-size="9" fill="#5b21b6" text-anchor="middle">(angles = , sides ∝)</text>
+  <text x="330" y="250" font-size="9" fill="#5b21b6" text-anchor="middle">Congruent: same</text>
+  <text x="330" y="264" font-size="9" fill="#5b21b6" text-anchor="middle">shape AND size</text>
+</svg>

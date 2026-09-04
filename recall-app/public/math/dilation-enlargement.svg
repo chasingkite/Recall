@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <rect width="400" height="300" fill="#fff"/>
+  <!-- Grid -->
+  <g stroke="#e5e7eb" stroke-width="0.5">
+    <line x1="0" y1="150" x2="400" y2="150"/>
+    <line x1="200" y1="0" x2="200" y2="300"/>
+    <line x1="0" y1="50" x2="400" y2="50"/><line x1="0" y1="100" x2="400" y2="100"/>
+    <line x1="0" y1="200" x2="400" y2="200"/><line x1="0" y1="250" x2="400" y2="250"/>
+    <line x1="50" y1="0" x2="50" y2="300"/><line x1="100" y1="0" x2="100" y2="300"/>
+    <line x1="150" y1="0" x2="150" y2="300"/><line x1="250" y1="0" x2="250" y2="300"/>
+    <line x1="300" y1="0" x2="300" y2="300"/><line x1="350" y1="0" x2="350" y2="300"/>
+  </g>
+  <!-- Axes -->
+  <line x1="200" y1="0" x2="200" y2="300" stroke="#9ca3af" stroke-width="1.5"/>
+  <line x1="0" y1="150" x2="400" y2="150" stroke="#9ca3af" stroke-width="1.5"/>
+  <text x="390" y="145" font-size="12" fill="#6b7280">x</text>
+  <text x="205" y="12" font-size="12" fill="#6b7280">y</text>
+  <!-- Center of dilation -->
+  <circle cx="200" cy="150" r="4" fill="#ef4444"/>
+  <text x="208" y="165" font-size="11" fill="#ef4444" font-weight="bold">C (origin)</text>
+  <!-- Original triangle (blue) -->
+  <polygon points="250,100 300,150 250,150" fill="rgba(59,130,246,0.15)" stroke="#3b82f6" stroke-width="2"/>
+  <text x="253" y="95" font-size="10" fill="#3b82f6">A(1,1)</text>
+  <text x="303" y="155" font-size="10" fill="#3b82f6">B(2,0)</text>
+  <text x="225" y="165" font-size="10" fill="#3b82f6" text-anchor="end">C(1,0)</text>
+  <!-- Dilated triangle k=2 (green) -->
+  <polygon points="300,50 400,150 300,150" fill="rgba(34,197,94,0.1)" stroke="#22c55e" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="303" y="45" font-size="10" fill="#16a34a">A'(2,2)</text>
+  <text x="370" y="145" font-size="10" fill="#16a34a">B'(4,0)</text>
+  <text x="275" y="145" font-size="10" fill="#16a34a" text-anchor="end">C'(2,0)</text>
+  <!-- Rays from center -->
+  <line x1="200" y1="150" x2="300" y2="50" stroke="#ef4444" stroke-width="0.8" stroke-dasharray="4,4" opacity="0.5"/>
+  <line x1="200" y1="150" x2="400" y2="150" stroke="#ef4444" stroke-width="0.8" stroke-dasharray="4,4" opacity="0.5"/>
+  <!-- Labels -->
+  <text x="200" y="285" font-size="13" fill="#1f2937" text-anchor="middle" font-weight="bold">Dilation with k = 2 (Enlargement)</text>
+  <text x="200" y="270" font-size="11" fill="#6b7280" text-anchor="middle">(x, y) → (2x, 2y)</text>
+  <!-- Legend -->
+  <rect x="10" y="10" width="12" height="12" fill="#3b82f6" rx="2"/>
+  <text x="26" y="20" font-size="10" fill="#3b82f6">Original</text>
+  <rect x="10" y="26" width="12" height="12" fill="#22c55e" rx="2"/>
+  <text x="26" y="36" font-size="10" fill="#22c55e">Image (k=2)</text>
+</svg>

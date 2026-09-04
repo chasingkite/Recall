@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280">
+  <rect width="400" height="280" fill="#fff"/>
+  <text x="200" y="25" font-size="14" fill="#1f2937" text-anchor="middle" font-weight="bold">Transformation Rules Cheat Sheet</text>
+
+  <!-- Translation -->
+  <rect x="10" y="40" width="185" height="55" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5" rx="8"/>
+  <text x="102" y="58" font-size="12" fill="#1d4ed8" text-anchor="middle" font-weight="bold">Translation (slide)</text>
+  <text x="102" y="74" font-size="10" fill="#1e40af" text-anchor="middle">(x, y) → (x + a, y + b)</text>
+  <text x="102" y="88" font-size="9" fill="#6b7280" text-anchor="middle">Shape, size, orientation preserved</text>
+
+  <!-- Reflection -->
+  <rect x="205" y="40" width="185" height="55" fill="#faf5ff" stroke="#a855f7" stroke-width="1.5" rx="8"/>
+  <text x="297" y="58" font-size="12" fill="#7e22ce" text-anchor="middle" font-weight="bold">Reflection (flip)</text>
+  <text x="297" y="74" font-size="10" fill="#7e22ce" text-anchor="middle">x-axis: (x,y)→(x,-y)</text>
+  <text x="297" y="88" font-size="10" fill="#7e22ce" text-anchor="middle">y-axis: (x,y)→(-x,y)</text>
+
+  <!-- Rotation -->
+  <rect x="10" y="105" width="185" height="70" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.5" rx="8"/>
+  <text x="102" y="123" font-size="12" fill="#15803d" text-anchor="middle" font-weight="bold">Rotation (turn)</text>
+  <text x="102" y="139" font-size="10" fill="#166534" text-anchor="middle">90° CCW: (x,y)→(-y,x)</text>
+  <text x="102" y="153" font-size="10" fill="#166534" text-anchor="middle">180°: (x,y)→(-x,-y)</text>
+  <text x="102" y="167" font-size="10" fill="#166534" text-anchor="middle">270° CCW: (x,y)→(y,-x)</text>
+
+  <!-- Dilation -->
+  <rect x="205" y="105" width="185" height="70" fill="#fff7ed" stroke="#f97316" stroke-width="1.5" rx="8"/>
+  <text x="297" y="123" font-size="12" fill="#c2410c" text-anchor="middle" font-weight="bold">Dilation (scale)</text>
+  <text x="297" y="139" font-size="10" fill="#c2410c" text-anchor="middle">(x, y) → (kx, ky)</text>
+  <text x="297" y="155" font-size="10" fill="#c2410c" text-anchor="middle">k > 1: enlargement</text>
+  <text x="297" y="169" font-size="10" fill="#c2410c" text-anchor="middle">0 &lt; k &lt; 1: reduction</text>
+
+  <!-- Rigid vs Non-rigid -->
+  <rect x="10" y="190" width="380" height="80" fill="#fefce8" stroke="#eab308" stroke-width="1.5" rx="8"/>
+  <text x="200" y="210" font-size="12" fill="#854d0e" text-anchor="middle" font-weight="bold">Rigid (Congruence) vs Non-rigid (Similarity)</text>
+  <line x1="200" y1="218" x2="200" y2="262" stroke="#d4d4d8" stroke-width="1"/>
+  <text x="105" y="232" font-size="10" fill="#854d0e" text-anchor="middle" font-weight="bold">Rigid Motions</text>
+  <text x="105" y="246" font-size="9" fill="#854d0e" text-anchor="middle">Translation, Reflection, Rotation</text>
+  <text x="105" y="260" font-size="9" fill="#854d0e" text-anchor="middle">Preserve length + angle → congruent</text>
+  <text x="305" y="232" font-size="10" fill="#854d0e" text-anchor="middle" font-weight="bold">Non-rigid</text>
+  <text x="305" y="246" font-size="9" fill="#854d0e" text-anchor="middle">Dilation (+ rigid motions)</text>
+  <text x="305" y="260" font-size="9" fill="#854d0e" text-anchor="middle">Preserve angle only → similar</text>
+</svg>
