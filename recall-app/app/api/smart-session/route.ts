@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     userSubjects = profile?.subjects || [];
   }
 
-  // 1. Get upcoming assignments from Canvas cache (only if user has Canvas)
+  // 1. Get upcoming assignments and grades from Canvas cache (only if user has Canvas)
   const { data: cache } = canvasStudentId
     ? await supabase.from("canvas_cache").select("data").eq("student_id", canvasStudentId).single()
     : { data: null };
@@ -37,9 +37,20 @@ export async function GET(request: Request) {
   const now = new Date();
   const weekFromNow = new Date(now.getTime() + 7 * 86400000);
   const upcomingAssignments: { name: string; dueAt: string; courseName: string }[] = [];
+  const courseGrades: Record<string, number> = {};
 
   if (cache?.data) {
     for (const course of cache.data as any[]) {
+      if (course.score != null) {
+        const name = (course.name || "").toLowerCase();
+        const mapped = name.includes("math") ? "math"
+          : name.includes("english") ? "english"
+          : name.includes("spanish") ? "spanish"
+          : name.includes("bio") ? "biology"
+          : name.includes("pe") || name.includes("physical") ? "pe"
+          : null;
+        if (mapped) courseGrades[mapped] = course.score;
+      }
       for (const a of course.assignments || []) {
         if (a.dueAt && a.status === "unsubmitted") {
           const dueDate = new Date(a.dueAt);
@@ -177,7 +188,7 @@ Only include topics that directly relate to the assignments. If no topics match,
     }
   }
 
-  // 4. Build session
+  // 4. Build session — guarantee subject diversity
   const priorityDue: any[] = [];
   const normalDue: any[] = [];
   const priorityUnseen: any[] = [];
@@ -206,21 +217,73 @@ Only include topics that directly relate to the assignments. If no topics match,
 
   const sessionSize = mode === "quick5" ? 5 : 20;
 
+  // Reserve slots for each subject — weighted by grade gap (lower grade = more cards)
+  const allSubjects = [...new Set(cards.map((c: any) => c.decks?.subject).filter(Boolean))];
+  const A_THRESHOLD = 93;
+  const subjectWeights: Record<string, number> = {};
+  let totalWeight = 0;
+  for (const subj of allSubjects) {
+    const grade = courseGrades[subj];
+    const gap = grade != null ? Math.max(0, A_THRESHOLD - grade) : 5;
+    const weight = Math.max(1, gap);
+    subjectWeights[subj] = weight;
+    totalWeight += weight;
+  }
+
+  const reservedTotal = Math.min(Math.floor(sessionSize * 0.6), sessionSize - 2);
+  const subjectSlots: Record<string, number> = {};
+  for (const subj of allSubjects) {
+    subjectSlots[subj] = Math.max(1, Math.round((subjectWeights[subj] / totalWeight) * reservedTotal));
+  }
+  const prioritySlots = sessionSize - Object.values(subjectSlots).reduce((a, b) => a + b, 0);
+
   const sessionCards: any[] = [];
+  const usedIds = new Set<string>();
+
+  // Fill priority slots (Canvas-matched topics first)
   const pools = [priorityDue, normalDue, priorityUnseen, normalUnseen];
   for (const pool of pools) {
     for (const card of pool) {
-      if (sessionCards.length >= sessionSize) break;
-      sessionCards.push(card);
+      if (sessionCards.length >= prioritySlots) break;
+      if (!usedIds.has((card as any).id)) {
+        sessionCards.push(card);
+        usedIds.add((card as any).id);
+      }
     }
-    if (sessionCards.length >= sessionSize) break;
+    if (sessionCards.length >= prioritySlots) break;
   }
 
+  // Fill reserved slots — weighted by grade, lowest grades get more cards
+  const sessionSubjects = new Set(sessionCards.map((c: any) => c.decks?.subject));
+  const allAvailable = [...dueCards, ...unseenCards, ...notDueCards];
+
+  // Sort subjects by weight descending (lowest grade first)
+  const sortedSubjects = allSubjects.sort((a, b) => subjectWeights[b] - subjectWeights[a]);
+
+  for (const subj of sortedSubjects) {
+    const existingCount = sessionCards.filter((c: any) => c.decks?.subject === subj).length;
+    const needed = (subjectSlots[subj] || 1) - existingCount;
+    if (needed <= 0) continue;
+
+    const subjectPool = allAvailable
+      .filter((c: any) => c.decks?.subject === subj && !usedIds.has(c.id))
+      .sort(() => Math.random() - 0.5);
+    const toAdd = Math.min(needed, subjectPool.length);
+    for (let i = 0; i < toAdd && sessionCards.length < sessionSize; i++) {
+      sessionCards.push(subjectPool[i]);
+      usedIds.add(subjectPool[i].id);
+    }
+  }
+
+  // Fill any remaining slots
   if (sessionCards.length < sessionSize) {
-    notDueCards.sort(() => Math.random() - 0.5);
-    for (const card of notDueCards) {
+    const remaining = allAvailable
+      .filter((c: any) => !usedIds.has(c.id))
+      .sort(() => Math.random() - 0.5);
+    for (const card of remaining) {
       if (sessionCards.length >= sessionSize) break;
       sessionCards.push(card);
+      usedIds.add((card as any).id);
     }
   }
 
