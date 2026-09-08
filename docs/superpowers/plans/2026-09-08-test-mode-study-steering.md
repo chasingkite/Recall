@@ -660,6 +660,90 @@ Expected: prints restored subjects `["spanish","biology","english","math",...]` 
 
 ---
 
+## Task 10: Daily goal counts cards *reviewed*, not *correct* (forward-only)
+
+**Context:** The streak advances only when the daily goal is met, and the goal is currently `cards_correct >= 20`. This is stricter than the "20 cards" the UI implies and caused a student's streak to reset despite daily studying. Change the goal to `cards_reviewed >= 20`. **Forward-only** — do NOT backfill historical `goal_met` or recompute past streaks.
+
+**Files:**
+- Modify: `app/api/daily-progress/route.ts:55`
+- Modify: `app/components/StudyTab.tsx` (goal display uses reviewed)
+- Modify: `app/components/DashboardTab.tsx` (goal display + `dailyGoalMet` use reviewed)
+- Test: `test-integration.mjs`
+
+- [ ] **Step 1: Write the failing integration test**
+
+```js
+await test("daily-progress goal met by cards reviewed (not correct)", async () => {
+  // fresh test user has no progress today; 20 reviewed / 0 correct should meet the goal
+  const r = await api(`/api/daily-progress`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId: TEST_USER_ID, cardsReviewed: 20, cardsCorrect: 0 }),
+  });
+  const data = await r.json();
+  assert(data.goal_met === true, `expected goal_met=true for 20 reviewed/0 correct, got ${data.goal_met}`);
+});
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `node test-integration.mjs`
+Expected: FAIL — `goal_met` is `false` (old rule needs 20 *correct*).
+
+- [ ] **Step 3: Change the goal metric** in `app/api/daily-progress/route.ts`
+
+Change line 55 from:
+
+```ts
+const isGoalMet = newCorrect >= DAILY_GOAL_CARDS;
+```
+
+to:
+
+```ts
+const isGoalMet = newReviewed >= DAILY_GOAL_CARDS;
+```
+
+- [ ] **Step 4: Run the integration test to verify it passes**
+
+Run: `node test-integration.mjs`
+Expected: PASS. Existing tests still pass.
+
+- [ ] **Step 5: Update StudyTab goal display to use reviewed**
+
+In `app/components/StudyTab.tsx`, add a `dailyReviewed` state next to `dailyCorrect`:
+
+```tsx
+const [dailyReviewed, setDailyReviewed] = useState(0);
+```
+
+Where progress is read (the mount fetch ~line 193 and the post-session update ~line 437), also set it:
+
+```tsx
+setDailyReviewed(progress.cards_reviewed || 0);
+```
+
+Then change the goal-progress references from `dailyCorrect` to `dailyReviewed` at these spots (verify line numbers): the `cardsRemaining` calc (~517), the two `progressPct` calcs (~533, ~596), and the three `{dailyCorrect} / {DAILY_GOAL_CARDS}` / "more to go" displays (~550, ~654, ~668). Leave any true accuracy display (correct answers) as `dailyCorrect` if one exists.
+
+- [ ] **Step 6: Update DashboardTab goal display to use reviewed**
+
+In `app/components/DashboardTab.tsx`, add `dailyReviewed` state, set it from `progressRes.cards_reviewed` (~line 143), and change:
+- line ~107 `const dailyGoalMet = dailyCorrect >= DAILY_GOAL_CARDS;` → `dailyReviewed >= DAILY_GOAL_CARDS`
+- the `progressPct` (~213) and the `{dailyCorrect} / {DAILY_GOAL_CARDS}` display + "more to go" (~358, ~363) → use `dailyReviewed`.
+
+- [ ] **Step 7: Manual verification**
+
+Run the app, do a session of 20+ cards with some wrong answers. Expected: daily goal shows met (`20/20`), and the streak advances the next consecutive goal-met day.
+
+- [ ] **Step 8: Type check + commit**
+
+```bash
+node_modules/.bin/tsc --noEmit
+git add app/api/daily-progress/route.ts app/components/StudyTab.tsx app/components/DashboardTab.tsx test-integration.mjs
+git commit -m "feat: daily goal counts cards reviewed instead of correct"
+```
+
+---
+
 ## Full-suite gate (run before final merge)
 
 ```bash
