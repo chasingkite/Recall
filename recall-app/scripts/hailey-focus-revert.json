@@ -1,0 +1,39 @@
+{
+  "hailey_id": "be5c10f0-adf1-4a14-90ba-19b16b250e14",
+  "hailey_subjects": [
+    "spanish",
+    "biology",
+    "english",
+    "math",
+    "science",
+    "reading",
+    "history"
+  ],
+  "decks": [
+    {
+      "id": "424c7b62-766f-4aa6-b495-955a140086cf",
+      "name": "dilation_transformation",
+      "subject": "math"
+    },
+    {
+      "id": "4c348687-5e82-4e7e-a6d0-a54128c837c0",
+      "name": "IM2 Ch2 - Transformations & Similarity",
+      "subject": "math"
+    },
+    {
+      "id": "0c87a9f6-dc70-4675-a99d-13df73eafab6",
+      "name": "Dilation — IXL Practice",
+      "subject": "math"
+    },
+    {
+      "id": "d30c436d-bb6b-4b46-aec1-cba5464e5f77",
+      "name": "Transformations — Rules & Concepts",
+      "subject": "math"
+    },
+    {
+      "id": "41e84a16-634b-48bf-b82c-3ff9c6c87ffb",
+      "name": "Transformations — Graph Practice",
+      "subject": "math"
+    }
+  ]
+}
