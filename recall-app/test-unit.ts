@@ -368,6 +368,17 @@ function testSessionBuilder() {
   assert(dilationOnly.length === 1 && dilationOnly[0].id === "a", "focus topic keeps only that topic");
   // no focus
   assert(selectFocusCards(cards, { subject: null, topic: null }).length === 3, "no focus keeps all");
+
+  // orderByStarred
+  const pool: BuilderCard[] = [
+    { id: "x", topic: "t", deck_id: "plain", decks: { subject: "math" } },
+    { id: "y", topic: "t", deck_id: "starred", decks: { subject: "math" } },
+    { id: "z", topic: "t", deck_id: "plain", decks: { subject: "math" } },
+  ];
+  const ordered = orderByStarred(pool, new Set(["starred"]));
+  assert(ordered[0].id === "y", "starred-deck card sorts first");
+  assert(ordered.length === 3, "orderByStarred keeps all cards");
+  assert(orderByStarred(pool, new Set()).map((c) => c.id).join("") === "xyz", "no stars = original order");
 }
 
 // ==================== MAIN ====================

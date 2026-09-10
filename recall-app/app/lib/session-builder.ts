@@ -29,3 +29,11 @@ export function selectFocusCards<T extends BuilderCard>(
     return true;
   });
 }
+
+/** Stable-partition so cards from starred decks come first; order within each group is preserved. */
+export function orderByStarred<T extends BuilderCard>(cards: T[], starredDeckIds: Set<string>): T[] {
+  if (starredDeckIds.size === 0) return cards;
+  const starred = cards.filter((c) => starredDeckIds.has(c.deck_id));
+  const rest = cards.filter((c) => !starredDeckIds.has(c.deck_id));
+  return [...starred, ...rest];
+}
