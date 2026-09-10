@@ -17,3 +17,15 @@ export function getSessionSize(mode: string, hasFocus: boolean): number {
   if (mode === "test") return hasFocus ? 40 : 30;
   return 20; // "full" and any unknown mode
 }
+
+/** Keep only cards matching the given subject and/or topic. Null filters are ignored. */
+export function selectFocusCards<T extends BuilderCard>(
+  cards: T[],
+  focus: { subject?: string | null; topic?: string | null }
+): T[] {
+  return cards.filter((c) => {
+    if (focus.subject && c.decks?.subject !== focus.subject) return false;
+    if (focus.topic && c.topic !== focus.topic) return false;
+    return true;
+  });
+}

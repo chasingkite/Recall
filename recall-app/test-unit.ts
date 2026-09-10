@@ -352,6 +352,22 @@ function testSessionBuilder() {
   assert(getSessionSize("test", true) === 40, "test + focus = 40 cards");
   assert(getSessionSize("test", false) === 30, "test no focus = 30 cards");
   assert(getSessionSize("anything-else", false) === 20, "unknown mode defaults to 20");
+
+  // selectFocusCards
+  const cards: BuilderCard[] = [
+    { id: "a", topic: "dilation_basics", deck_id: "d1", decks: { subject: "math" } },
+    { id: "b", topic: "psat_factoring", deck_id: "d2", decks: { subject: "math" } },
+    { id: "c", topic: "greetings", deck_id: "d3", decks: { subject: "spanish" } },
+  ];
+  // subject-only focus
+  const mathOnly = selectFocusCards(cards, { subject: "math", topic: null });
+  assert(mathOnly.length === 2, "focus subject=math keeps 2 math cards");
+  assert(mathOnly.every((c) => c.decks?.subject === "math"), "no non-math cards leak in");
+  // subject + topic focus
+  const dilationOnly = selectFocusCards(cards, { subject: "math", topic: "dilation_basics" });
+  assert(dilationOnly.length === 1 && dilationOnly[0].id === "a", "focus topic keeps only that topic");
+  // no focus
+  assert(selectFocusCards(cards, { subject: null, topic: null }).length === 3, "no focus keeps all");
 }
 
 // ==================== MAIN ====================
