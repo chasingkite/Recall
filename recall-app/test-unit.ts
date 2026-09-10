@@ -17,6 +17,13 @@ import {
   DIFFICULTY_LEVELS,
 } from "./app/lib/supabase/db-types.ts";
 
+import {
+  getSessionSize,
+  selectFocusCards,
+  orderByStarred,
+  type BuilderCard,
+} from "./app/lib/session-builder.ts";
+
 let passed = 0;
 let failed = 0;
 
@@ -336,6 +343,17 @@ function testSessionAnswerTracking() {
   assert(perfect.filter(a => a.correct).length === 2, "Perfect session = 2/2 correct");
 }
 
+function testSessionBuilder() {
+  console.log("\n🎯 Session Builder");
+
+  // getSessionSize
+  assert(getSessionSize("quick5", false) === 5, "quick5 = 5 cards");
+  assert(getSessionSize("full", false) === 20, "full = 20 cards");
+  assert(getSessionSize("test", true) === 40, "test + focus = 40 cards");
+  assert(getSessionSize("test", false) === 30, "test no focus = 30 cards");
+  assert(getSessionSize("anything-else", false) === 20, "unknown mode defaults to 20");
+}
+
 // ==================== MAIN ====================
 console.log("🧪 Recall — Pure Logic Unit Tests");
 console.log("==========================================");
@@ -349,6 +367,7 @@ testConstants();
 testDailyProgressAccumulation();
 testSessionSaveGuard();
 testSessionAnswerTracking();
+testSessionBuilder();
 
 console.log("\n==========================================");
 console.log(`Results: ${passed} passed, ${failed} failed out of ${passed + failed}`);
