@@ -6,6 +6,7 @@ import { StudyCard, MAX_SESSION_SIZE } from "../lib/sample-cards";
 import { checkAnswer, actionToRating } from "../lib/spaced-repetition";
 import { earnSessionPoints, clearLegacyData } from "../lib/points";
 import { DAILY_GOAL_CARDS } from "../lib/supabase/db-types";
+import { getSessionSize } from "../lib/session-builder";
 import MemoryScoreWidget from "./MemoryScoreWidget";
 import CelebrationModal from "./CelebrationModal";
 import StreakBadge from "./StreakBadge";
@@ -122,8 +123,15 @@ export default function StudyTab() {
   const [enrichField, setEnrichField] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
 
+  // Study focus + session size (Focus picker)
+  const [sessionMode, setSessionMode] = useState<"quick5" | "full" | "test">("quick5");
+  const [focusSubject, setFocusSubject] = useState<string>("all");
+  const [focusTopic, setFocusTopic] = useState<string>("");
+  const [profileSubjects, setProfileSubjects] = useState<string[]>([]);
+  const [focusTopics, setFocusTopics] = useState<string[]>([]);
+
   // Daily progress state
-  const [dailyCorrect, setDailyCorrect] = useState(0);
+  const [dailyReviewed, setDailyReviewed] = useState(0);
   const [dailyGoalMet, setDailyGoalMet] = useState(false);
   const [justMetGoal, setJustMetGoal] = useState(false);
 
@@ -184,28 +192,18 @@ export default function StudyTab() {
         ? fetch(`/api/daily-progress?userId=${user.id}`).then(r => r.json()).catch(() => null)
         : Promise.resolve(null);
 
-      const cardsPromise = fetch(`/api/smart-session?userId=${user?.id || ""}&mode=quick5&subject=all`)
-        .then(r => r.json()).catch(() => null);
+      const cardsPromise = fetchSessionCards(user?.id || "", "quick5", "all", "");
 
       // Update daily progress as soon as it arrives
       const progress = await progressPromise;
       if (progress) {
-        setDailyCorrect(progress.cards_correct || 0);
+        setDailyReviewed(progress.cards_reviewed || 0);
         setDailyGoalMet(progress.goal_met || false);
       }
 
       // Update cards as soon as they arrive
-      const data = await cardsPromise;
-      if (data?.cards?.length > 0) {
-        const studyCards = (data.cards as DBCard[]).map(dbCardToStudyCard);
-        const allPool = data.allCards ? (data.allCards as DBCard[]).map(dbCardToStudyCard) : studyCards;
-        const varied = assignVariety(studyCards, allPool);
-        setCards(varied);
-        setTotalCards(data.totalDue || varied.length);
-        if (data.assignments?.length > 0 && data.matchedTopics?.length > 0) {
-          setStudyReason(data.assignments[0].name);
-        }
-      } else {
+      const gotCards = await cardsPromise;
+      if (!gotCards) {
         // Fallback: load cards directly from Supabase
         const { data: dbCards } = await supabase.from("cards").select("*, decks(subject)").limit(50);
         if (dbCards && dbCards.length > 0) {
@@ -229,7 +227,66 @@ export default function StudyTab() {
     }
   }
 
-  function handleStart() {
+  // Fetch a session from smart-session for the given focus/mode. Sets cards + returns them (or null).
+  async function fetchSessionCards(
+    uid: string,
+    mode: string,
+    subject: string,
+    topic: string
+  ): Promise<StudyCard[] | null> {
+    try {
+      const data = await fetch(
+        `/api/smart-session?userId=${uid}&mode=${mode}&subject=${encodeURIComponent(subject)}&topic=${encodeURIComponent(topic)}`
+      ).then((r) => r.json());
+      if (!data?.cards?.length) return null;
+      const studyCards = (data.cards as DBCard[]).map(dbCardToStudyCard);
+      const allPool = data.allCards ? (data.allCards as DBCard[]).map(dbCardToStudyCard) : studyCards;
+      const varied = assignVariety(studyCards, allPool);
+      setCards(varied);
+      setTotalCards(data.totalDue || varied.length);
+      if (data.assignments?.length > 0 && data.matchedTopics?.length > 0) {
+        setStudyReason(data.assignments[0].name);
+      }
+      return varied;
+    } catch {
+      return null;
+    }
+  }
+
+  // Load the user's subjects for the Focus picker
+  useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from("profiles")
+      .select("subjects")
+      .eq("id", userId)
+      .single()
+      .then(({ data }) => setProfileSubjects((data?.subjects as string[]) || []));
+  }, [userId]);
+
+  // Load topics when a focus subject is chosen
+  useEffect(() => {
+    if (focusSubject === "all") {
+      setFocusTopics([]);
+      setFocusTopic("");
+      return;
+    }
+    supabase
+      .from("cards")
+      .select("topic, decks!inner(subject)")
+      .eq("decks.subject", focusSubject)
+      .then(({ data }) => {
+        const topics = [...new Set((data || []).map((c: any) => c.topic).filter(Boolean))].sort();
+        setFocusTopics(topics as string[]);
+        setFocusTopic("");
+      });
+  }, [focusSubject]);
+
+  async function handleStart() {
+    // Fetch a fresh session for the chosen focus/size; fall back to whatever is loaded
+    const fresh = await fetchSessionCards(userId || "", sessionMode, focusSubject, focusTopic);
+    const sessionCards = fresh || cards;
+
     setPhase("studying");
     setCurrentIndex(0);
     setCorrectCount(0);
@@ -247,8 +304,8 @@ export default function StudyTab() {
     // Fetch study sheet in background (available via "Review Notes" button)
     setSheetLoading(true);
     setStudySheetContent("");
-    const topics = [...new Set(cards.map((c) => c.topic).filter(Boolean))];
-    const fronts = cards.map((c) => c.front);
+    const topics = [...new Set(sessionCards.map((c) => c.topic).filter(Boolean))];
+    const fronts = sessionCards.map((c) => c.front);
 
     fetch("/api/study-sheet", {
       method: "POST",
@@ -434,7 +491,7 @@ export default function StudyTab() {
         }),
       });
       const progress = await res.json();
-      setDailyCorrect(progress.cards_correct || 0);
+      setDailyReviewed(progress.cards_reviewed || 0);
       setDailyGoalMet(progress.goal_met || false);
       if (progress.just_met_goal) setJustMetGoal(true);
     } catch {}
@@ -514,7 +571,7 @@ export default function StudyTab() {
 
   const card = cards[currentIndex];
   const accuracy = cards.length > 0 ? Math.round((correctCount / Math.max(1, currentIndex + (answered ? 1 : 0))) * 100) : 0;
-  const cardsRemaining = DAILY_GOAL_CARDS - dailyCorrect;
+  const cardsRemaining = DAILY_GOAL_CARDS - dailyReviewed;
 
   // Loading
   if (loading) {
@@ -530,7 +587,7 @@ export default function StudyTab() {
 
   // START SCREEN
   if (phase === "start") {
-    const progressPct = Math.min(100, Math.round((dailyCorrect / DAILY_GOAL_CARDS) * 100));
+    const progressPct = Math.min(100, Math.round((dailyReviewed / DAILY_GOAL_CARDS) * 100));
 
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center px-6">
@@ -547,7 +604,7 @@ export default function StudyTab() {
           <div className="flex items-center justify-between mb-3">
             <span className="text-[13px] font-semibold text-gray-500 tracking-wide">Daily Goal</span>
             <span className={`text-[13px] font-bold tabular-nums ${dailyGoalMet ? "text-amber-500" : "text-gray-800"}`}>
-              {dailyCorrect} / {DAILY_GOAL_CARDS}
+              {dailyReviewed} / {DAILY_GOAL_CARDS}
             </span>
           </div>
           <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -564,7 +621,7 @@ export default function StudyTab() {
           <p className="text-[12px] text-gray-400 mt-2">
             {dailyGoalMet
               ? "Goal complete! Extra cards earn bonus points."
-              : `${cardsRemaining} more correct to reach your goal`}
+              : `${cardsRemaining} more to reach your goal`}
           </p>
         </div>
 
@@ -575,7 +632,48 @@ export default function StudyTab() {
         {studyReason && (
           <p className="text-[13px] text-blue-500 font-medium mb-1">{studyReason} — due soon</p>
         )}
-        <p className="text-[13px] text-gray-400 mb-8">{totalCards} cards · 5 per session</p>
+        <p className="text-[13px] text-gray-400 mb-8">
+          {totalCards} cards · {getSessionSize(sessionMode, !!focusTopic)} per session
+        </p>
+
+        {/* Focus picker — size + subject/topic steering */}
+        <div className="w-full max-w-sm mb-4 space-y-3">
+          <div className="flex gap-2">
+            {(["quick5", "full", "test"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setSessionMode(m)}
+                className={`flex-1 py-2 rounded-[12px] text-[13px] font-semibold transition ${
+                  sessionMode === m ? "bg-blue-500 text-white" : "bg-white text-gray-600 border border-gray-200"
+                }`}
+              >
+                {m === "quick5" ? "Quick (5)" : m === "full" ? "Full (20)" : "Test Mode"}
+              </button>
+            ))}
+          </div>
+          <select
+            value={focusSubject}
+            onChange={(e) => setFocusSubject(e.target.value)}
+            className="w-full py-2 px-3 rounded-[12px] bg-white border border-gray-200 text-[14px]"
+          >
+            <option value="all">All subjects</option>
+            {profileSubjects.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          {focusTopics.length > 0 && (
+            <select
+              value={focusTopic}
+              onChange={(e) => setFocusTopic(e.target.value)}
+              className="w-full py-2 px-3 rounded-[12px] bg-white border border-gray-200 text-[14px]"
+            >
+              <option value="">All topics in {focusSubject}</option>
+              {focusTopics.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          )}
+        </div>
 
         <button
           onClick={handleStart}
@@ -593,7 +691,7 @@ export default function StudyTab() {
   // DONE SCREEN
   if (phase === "done") {
     const pct = cards.length > 0 ? Math.round((correctCount / cards.length) * 100) : 0;
-    const progressPct = Math.min(100, Math.round((dailyCorrect / DAILY_GOAL_CARDS) * 100));
+    const progressPct = Math.min(100, Math.round((dailyReviewed / DAILY_GOAL_CARDS) * 100));
 
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center px-6">
@@ -651,7 +749,7 @@ export default function StudyTab() {
           <div className="flex items-center justify-between mb-2">
             <span className="text-[13px] font-semibold text-gray-500">Daily Goal</span>
             <span className={`text-[13px] font-bold tabular-nums ${dailyGoalMet ? "text-amber-500" : "text-gray-800"}`}>
-              {dailyCorrect} / {DAILY_GOAL_CARDS}
+              {dailyReviewed} / {DAILY_GOAL_CARDS}
             </span>
           </div>
           <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -665,7 +763,7 @@ export default function StudyTab() {
             />
           </div>
           {!dailyGoalMet && (
-            <p className="text-[12px] text-gray-400 mt-1.5">{DAILY_GOAL_CARDS - dailyCorrect} more to go</p>
+            <p className="text-[12px] text-gray-400 mt-1.5">{DAILY_GOAL_CARDS - dailyReviewed} more to go</p>
           )}
         </div>
 
