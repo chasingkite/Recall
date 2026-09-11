@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   const newReviewed = (existing?.cards_reviewed || 0) + (cardsReviewed || 0);
   const newCorrect = (existing?.cards_correct || 0) + (cardsCorrect || 0);
   const wasGoalMet = existing?.goal_met || false;
-  const isGoalMet = newCorrect >= DAILY_GOAL_CARDS;
+  const isGoalMet = newReviewed >= DAILY_GOAL_CARDS;
 
   const { data, error } = await supabase
     .from("daily_progress")

@@ -186,3 +186,26 @@ CREATE POLICY "Admin manages all redemptions" ON redemptions FOR UPDATE USING (
 CREATE POLICY "Admin reads all topic_levels" ON topic_levels FOR SELECT USING (
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
 );
+
+-- ============ deck_priorities: per-student starred decks ============
+create table if not exists deck_priorities (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  deck_id uuid not null references decks(id) on delete cascade,
+  starred boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique (user_id, deck_id)
+);
+create index if not exists idx_deck_priorities_user on deck_priorities(user_id);
+
+alter table deck_priorities enable row level security;
+
+-- Admins manage all rows
+create policy "deck_priorities_admin_all" on deck_priorities
+  for all
+  using (exists (select 1 from profiles p where p.id = auth.uid() and p.role = 'admin'))
+  with check (exists (select 1 from profiles p where p.id = auth.uid() and p.role = 'admin'));
+
+-- A student may read their own rows
+create policy "deck_priorities_read_own" on deck_priorities
+  for select using (user_id = auth.uid());

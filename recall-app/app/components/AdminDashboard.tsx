@@ -34,7 +34,32 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<StudentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+  const [decks, setDecks] = useState<{ id: string; name: string; subject: string }[]>([]);
+  const [starredByUser, setStarredByUser] = useState<Record<string, Set<string>>>({});
   const supabase = createClient();
+
+  useEffect(() => {
+    supabase
+      .from("decks")
+      .select("id, name, subject")
+      .order("subject")
+      .then(({ data }) => setDecks((data as any) || []));
+  }, []);
+
+  async function loadStars(userId: string) {
+    const res = await fetch(`/api/deck-priorities?userId=${userId}`);
+    const { starredDeckIds } = await res.json();
+    setStarredByUser((prev) => ({ ...prev, [userId]: new Set(starredDeckIds || []) }));
+  }
+
+  async function toggleStar(userId: string, deckId: string, starred: boolean) {
+    await fetch(`/api/deck-priorities`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, deckId, starred }),
+    });
+    await loadStars(userId);
+  }
 
   useEffect(() => {
     loadDashboard();
@@ -203,7 +228,11 @@ export default function AdminDashboard() {
             <div key={s.profile.id} className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
               {/* Collapsed Card */}
               <div
-                onClick={() => setExpandedStudent(expanded ? null : s.profile.id)}
+                onClick={() => {
+                  const next = expanded ? null : s.profile.id;
+                  setExpandedStudent(next);
+                  if (next && !starredByUser[s.profile.id]) loadStars(s.profile.id);
+                }}
                 className="p-4 cursor-pointer active:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center justify-between">
@@ -326,6 +355,26 @@ export default function AdminDashboard() {
                       </div>
                     </>
                   )}
+
+                  {/* Study focus — starred decks get more cards */}
+                  <div className="mt-3">
+                    <p className="text-[13px] font-semibold text-gray-700 mb-2">Study focus — starred decks get more cards</p>
+                    {decks.map((d) => {
+                      const on = starredByUser[s.profile.id]?.has(d.id) ?? false;
+                      return (
+                        <button
+                          key={d.id}
+                          onClick={() => toggleStar(s.profile.id, d.id, !on)}
+                          className="w-full flex items-center justify-between py-2 px-3 rounded-[10px] active:opacity-50"
+                        >
+                          <span className="text-[14px] text-gray-800">
+                            {d.name} <span className="text-[11px] text-gray-400">({d.subject})</span>
+                          </span>
+                          <span className={`text-[16px] ${on ? "text-yellow-500" : "text-gray-300"}`}>{on ? "★" : "☆"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

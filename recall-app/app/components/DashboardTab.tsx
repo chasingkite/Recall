@@ -92,7 +92,7 @@ function isTestOrProject(a: Assignment): boolean {
 export default function DashboardTab() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dailyCorrect, setDailyCorrect] = useState(0);
+  const [dailyReviewed, setDailyReviewed] = useState(0);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [userName, setUserName] = useState("Hailey");
   const [customTests, setCustomTests] = useState<CustomTest[]>([]);
@@ -104,7 +104,7 @@ export default function DashboardTab() {
   const supabase = createClient();
   const userIdRef = useRef<string | null>(null);
 
-  const dailyGoalMet = dailyCorrect >= DAILY_GOAL_CARDS;
+  const dailyGoalMet = dailyReviewed >= DAILY_GOAL_CARDS;
 
   useEffect(() => {
     loadDashboard();
@@ -140,7 +140,7 @@ export default function DashboardTab() {
     setCourses(canvasRes.data || []);
     if (profileRes.data?.display_name) setUserName(profileRes.data.display_name.split(" ")[0]);
     if (progressRes) {
-      setDailyCorrect(progressRes.cards_correct || 0);
+      setDailyReviewed(progressRes.cards_reviewed || 0);
     }
     if (dismissedRes.data?.data?.ids) {
       setDismissedIds(new Set(dismissedRes.data.data.ids));
@@ -210,7 +210,7 @@ export default function DashboardTab() {
   const overdue = activeAssignments.filter(a => isOverdue(a) && !dismissedIds.has(assignmentKey(a)));
   const dueThisWeek = activeAssignments.filter(a => isDueThisWeek(a) && !isOverdue(a) && !dismissedIds.has(assignmentKey(a)));
   const recentlyDismissed = activeAssignments.filter(a => dismissedIds.has(assignmentKey(a))).slice(0, 3);
-  const progressPct = Math.min(100, Math.round((dailyCorrect / DAILY_GOAL_CARDS) * 100));
+  const progressPct = Math.min(100, Math.round((dailyReviewed / DAILY_GOAL_CARDS) * 100));
 
   const now = new Date();
   const monthOut = new Date(now.getTime() + 30 * 86400000);
@@ -355,12 +355,12 @@ export default function DashboardTab() {
         <div className={`${CARD} p-4`}>
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-[15px] text-gray-900">Cards Mastered</span>
-            <span className={`text-[15px] font-bold tabular-nums ${dailyGoalMet ? "text-[#34c759]" : "text-gray-900"}`}>{dailyCorrect} / {DAILY_GOAL_CARDS}</span>
+            <span className={`text-[15px] font-bold tabular-nums ${dailyGoalMet ? "text-[#34c759]" : "text-gray-900"}`}>{dailyReviewed} / {DAILY_GOAL_CARDS}</span>
           </div>
           <div className="w-full h-[6px] bg-[#e5e5ea] rounded-full overflow-hidden">
             <div className={`h-full rounded-full transition-all duration-700 ${dailyGoalMet ? "bg-[#34c759]" : "bg-[#007aff]"}`} style={{ width: `${progressPct}%` }} />
           </div>
-          <p className="text-[13px] text-gray-400 mt-2">{dailyGoalMet ? "Goal complete!" : `${DAILY_GOAL_CARDS - dailyCorrect} more to go`}</p>
+          <p className="text-[13px] text-gray-400 mt-2">{dailyGoalMet ? "Goal complete!" : `${DAILY_GOAL_CARDS - dailyReviewed} more to go`}</p>
         </div>
       </div>
 

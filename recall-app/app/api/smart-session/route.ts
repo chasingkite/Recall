@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getSessionSize, selectFocusCards, orderByStarred } from "../../lib/session-builder";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 
@@ -10,6 +11,8 @@ export async function GET(request: Request) {
   const userId = searchParams.get("userId") || "";
   const mode = searchParams.get("mode") || "full";
   const subject = searchParams.get("subject") || "all";
+  const topic = searchParams.get("topic") || "";
+  const hasFocus = !!topic;
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -65,11 +68,11 @@ export async function GET(request: Request) {
   // 2. Get cards — filtered by user's subjects when subject=all
   let cardQuery;
   if (subject !== "all") {
-    cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, decks!inner(subject)").eq("decks.subject", subject).order("created_at");
+    cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, deck_id, decks!inner(subject)").eq("decks.subject", subject).order("created_at");
   } else if (userSubjects.length > 0) {
-    cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, decks!inner(subject)").in("decks.subject", userSubjects).order("created_at");
+    cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, deck_id, decks!inner(subject)").in("decks.subject", userSubjects).order("created_at");
   } else {
-    cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, decks(subject)").order("created_at");
+    cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, deck_id, decks(subject)").order("created_at");
   }
   const { data: cards } = await cardQuery;
   if (!cards || cards.length === 0) {
@@ -87,6 +90,12 @@ export async function GET(request: Request) {
       reviewMap.set(r.card_id, { next_review_at: r.next_review_at, reps: r.reps });
     }
   }
+
+  // Load this user's starred decks (per-student study focus)
+  const { data: starRows } = userId
+    ? await supabase.from("deck_priorities").select("deck_id").eq("user_id", userId).eq("starred", true)
+    : { data: null };
+  const starredDeckIds = new Set<string>((starRows || []).map((r: any) => r.deck_id));
 
   const nowStr = new Date().toISOString();
   const dueCards: any[] = [];
@@ -188,7 +197,31 @@ Only include topics that directly relate to the assignments. If no topics match,
     }
   }
 
-  // 4. Build session — guarantee subject diversity
+  // 4. Focused session — a topic drill skips subject diversity entirely
+  if (hasFocus) {
+    const focusSubject = subject !== "all" ? subject : null;
+    const pool = orderByStarred(
+      [
+        ...selectFocusCards(dueCards as any, { subject: focusSubject, topic }),
+        ...selectFocusCards(unseenCards as any, { subject: focusSubject, topic }),
+        ...selectFocusCards(notDueCards as any, { subject: focusSubject, topic }),
+      ],
+      starredDeckIds
+    );
+    const sessionSize = getSessionSize(mode, hasFocus);
+    const sessionCards = pool.slice(0, sessionSize);
+    return NextResponse.json({
+      cards: sessionCards,
+      allCards: cards.slice(0, 100),
+      assignments: upcomingAssignments.map((a) => ({ name: a.name, dueAt: a.dueAt })),
+      matchedTopics,
+      dueCount: dueCards.length,
+      unseenCount: unseenCards.length,
+      totalDue: pool.length,
+    });
+  }
+
+  // 5. Build session — guarantee subject diversity
   const priorityDue: any[] = [];
   const normalDue: any[] = [];
   const priorityUnseen: any[] = [];
@@ -215,7 +248,7 @@ Only include topics that directly relate to the assignments. If no topics match,
   priorityUnseen.sort(() => Math.random() - 0.5);
   normalUnseen.sort(() => Math.random() - 0.5);
 
-  const sessionSize = mode === "quick5" ? 5 : 20;
+  const sessionSize = getSessionSize(mode, hasFocus);
 
   // Reserve slots for each subject — weighted by grade gap (lower grade = more cards)
   const allSubjects = [...new Set(cards.map((c: any) => c.decks?.subject).filter(Boolean))];
@@ -265,9 +298,12 @@ Only include topics that directly relate to the assignments. If no topics match,
     const needed = (subjectSlots[subj] || 1) - existingCount;
     if (needed <= 0) continue;
 
-    const subjectPool = allAvailable
-      .filter((c: any) => c.decks?.subject === subj && !usedIds.has(c.id))
-      .sort(() => Math.random() - 0.5);
+    const subjectPool = orderByStarred(
+      allAvailable
+        .filter((c: any) => c.decks?.subject === subj && !usedIds.has(c.id))
+        .sort(() => Math.random() - 0.5),
+      starredDeckIds
+    );
     const toAdd = Math.min(needed, subjectPool.length);
     for (let i = 0; i < toAdd && sessionCards.length < sessionSize; i++) {
       sessionCards.push(subjectPool[i]);

@@ -96,7 +96,7 @@ async function cleanup() {
   if (!TEST_USER_ID) return;
 
   const tables = ["daily_progress", "card_reviews", "memory_scores", "streaks",
-    "points_ledger", "points_transactions", "redemptions", "topic_levels"];
+    "points_ledger", "points_transactions", "redemptions", "topic_levels", "deck_priorities"];
   for (const t of tables) {
     await fetch(`${SB_URL}/rest/v1/${t}?user_id=eq.${TEST_USER_ID}`, { method: "DELETE", headers: SB_HEADERS });
   }
@@ -289,6 +289,52 @@ async function testValidation() {
   assert((await api(`${BASE}/api/study-sheet`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) })).status === 400, "study-sheet empty → 400");
 }
 
+async function testSessionFocus() {
+  console.log("\n🎯 Session Focus + Test Mode");
+  // Topic focus: only the requested topic comes back
+  const { data } = await api(`${BASE}/api/smart-session?userId=${TEST_USER_ID}&mode=full&subject=math&topic=dilation_basics`);
+  const bad = (data.cards || []).filter(c => c.topic && c.topic !== "dilation_basics");
+  assert(bad.length === 0, "Topic focus returns only that topic", `leaked: ${bad.map(c => c.topic).join(",")}`);
+  // Test Mode returns more than Quick (5) when cards are available
+  const { data: t } = await api(`${BASE}/api/smart-session?userId=${TEST_USER_ID}&mode=test&subject=all`);
+  assert((t.cards || []).length > 5 || (t.totalDue ?? 0) <= 5, "Test Mode exceeds 5 when cards available", `got ${t.cards?.length}`);
+}
+
+async function testDeckPriorities() {
+  console.log("\n⭐ Deck Priorities");
+  const dRes = await fetch(`${SB_URL}/rest/v1/decks?select=id&limit=1`, { headers: SB_HEADERS });
+  const deckId = (await dRes.json())[0]?.id;
+  if (!deckId) { console.log("  ⏭️ No decks"); return; }
+
+  const { status: ps } = await api(`${BASE}/api/deck-priorities`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId: TEST_USER_ID, deckId, starred: true }),
+  });
+  assert(ps === 200, "POST star returns 200", `got ${ps}`);
+
+  const { data } = await api(`${BASE}/api/deck-priorities?userId=${TEST_USER_ID}`);
+  assert((data.starredDeckIds || []).includes(deckId), "GET lists the starred deck");
+
+  // unstar (cleanup + verify)
+  await api(`${BASE}/api/deck-priorities`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId: TEST_USER_ID, deckId, starred: false }),
+  });
+  const { data: after } = await api(`${BASE}/api/deck-priorities?userId=${TEST_USER_ID}`);
+  assert(!(after.starredDeckIds || []).includes(deckId), "Unstar removes it");
+}
+
+async function testDailyGoalByReviewed() {
+  console.log("\n🎯 Daily Goal — met by cards reviewed, not correct");
+  // Reset today's progress for the test user so 20 reviewed / 0 correct is a clean case
+  await fetch(`${SB_URL}/rest/v1/daily_progress?user_id=eq.${TEST_USER_ID}`, { method: "DELETE", headers: SB_HEADERS });
+  const { data } = await api(`${BASE}/api/daily-progress`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId: TEST_USER_ID, cardsReviewed: 20, cardsCorrect: 0 }),
+  });
+  assert(data.goal_met === true, "20 reviewed / 0 correct meets goal", `got ${data.goal_met}`);
+}
+
 // ==================== MAIN ====================
 async function main() {
   console.log("🧪 Recall — Full Integration Tests");
@@ -300,6 +346,8 @@ async function main() {
   try {
     await setup();
     await testSmartSession();
+    await testSessionFocus();
+    await testDeckPriorities();
     await testDailyProgress();
     await testCardReview();
     await testStreaks();
@@ -309,6 +357,7 @@ async function main() {
     await testScoreExplanation();
     await testGapAnalysis();
     await testValidation();
+    await testDailyGoalByReviewed();
   } finally {
     await cleanup();
   }
