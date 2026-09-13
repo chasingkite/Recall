@@ -41,11 +41,12 @@ recall-app/
 │   │   ├── CardView.tsx      # Reusable card display (MC, T/F, type, fill-blank)
 │   │   └── study/            # AudioButton, FlashCard, StudyTimer, etc.
 │   ├── api/
-│   │   ├── smart-session/    # FSRS-aware session builder + Canvas topic matching
+│   │   ├── smart-session/    # FSRS-aware session builder + Canvas topic matching + focus/Test Mode/star ordering
 │   │   ├── card-review/      # FSRS v5 review recording + memory score
-│   │   ├── daily-progress/   # Daily goal tracking (20 cards)
+│   │   ├── daily-progress/   # Daily goal tracking (goal met at 20 cards REVIEWED, not correct)
 │   │   ├── streaks/          # Streak data (current, longest, freezes)
 │   │   ├── topic-levels/     # Learning ladder progression (L1-L5)
+│   │   ├── deck-priorities/  # Per-student starred decks (list/star/unstar)
 │   │   ├── points/           # Points economy (earn, redeem, approve/deny)
 │   │   ├── enrich/           # Claude Haiku — 5 enrichment fields per card
 │   │   ├── score-explanation/ # AI scoring for explain-back answers
@@ -67,11 +68,13 @@ recall-app/
 │   │   └── seed/             # DB seeding endpoint
 │   └── lib/
 │       ├── spaced-repetition.ts # FSRS + answer checking (Levenshtein, normalization)
+│       ├── session-builder.ts   # Pure session helpers: getSessionSize, selectFocusCards, orderByStarred (unit-tested)
 │       ├── sample-cards.ts      # StudyCard type + sample data (MAX_SESSION_SIZE = 20)
 │       ├── study-stats.ts       # localStorage stats (legacy)
 │       ├── push-notifications.ts # Client-side push subscribe/unsubscribe
+│       ├── push.ts              # Lazy web-push VAPID config (getWebPush) — build-safe
 │       ├── points.ts            # Client-side points API wrapper
-│       └── supabase/            # client.ts, server.ts, db-types.ts
+│       └── supabase/            # client.ts (browser), server.ts (SSR), service.ts (lazy service-role), db-types.ts
 ├── middleware.ts             # Auth guard — redirects unauthenticated to /login
 ├── public/sw.js              # Service worker — push event handler
 ├── vercel.json               # Vercel Cron config
@@ -118,10 +121,23 @@ Key tables:
 - `points_ledger` / `points_transactions` / `redemptions` — points economy
 - `canvas_cache` — cached Canvas API responses (1-hour TTL)
 - `topic_levels` — per-topic L1-L5 progression
-- `push_subscriptions` — Web Push subscription storage (table scaffolded, not yet implemented)
+- `deck_priorities` — per-student starred decks (user_id, deck_id, starred); admin-managed, boosts a deck's cards in that student's sessions
+- `push_subscriptions` — Web Push subscription storage
 
 ### Migration
 `recall-app/supabase-migration.sql` — creates all engagement tables, indexes, and RLS policies. Run in Supabase SQL Editor.
+
+## Study Materials (~/Documents/StudyMaterials/)
+
+```
+StudyMaterials/
+├── Math_Ch2_TestPrep/     — 6 worksheets with SVG visuals (Day 1-3 + older practice)
+├── PSAT_Practice/         — PSAT math speed drills (pattern recognition)
+├── CardDecks/             — 13 CSV card decks (math, english, PSAT, PE, spanish)
+├── IM2/                   — Integrated Math 2 textbook chapter PDFs
+├── PE9/                   — PE chapter answer docs
+└── (textbooks)            — Algebra, Geometry, Biology, Spanish, SAT/PSAT
+```
 
 ## Architecture Notes
 
@@ -129,24 +145,27 @@ Key tables:
 - **Per-user data**: All tabs (Study, Progress, Dashboard) use the logged-in user's UUID. Canvas integration only activates for users with `canvas_student_id` set in profiles. Admin users without Canvas get FSRS-only card selection. Subjects shown in Progress tab are pulled from `profiles.subjects[]`, not hardcoded.
 - **Admin vs Student views**: Role-based. Admin sees AdminDashboard + AdminTab + StudyTab + ProgressTab. Students see DashboardTab + StudyTab + ProgressTab + RewardsTab.
 - **Study flow**: Start → card quiz (6 answer types incl. explain-back) → FSRS update → wrong card re-queue → done screen with gap analysis. Study sheet loads in background, available via collapsible "Notes" button during quiz.
-- **Smart sessions**: FSRS-aware card selection. For Canvas-linked users, prioritized by upcoming assignments with Claude topic matching (cached daily). For non-Canvas users, pure FSRS scheduling.
+- **Smart sessions**: FSRS-aware card selection. For Canvas-linked users, prioritized by upcoming assignments with Claude topic matching (cached daily). Grade-weighted: subjects with lower grades (gap from 93% A threshold) get more cards per session. For non-Canvas users, pure FSRS scheduling with subject balancing.
+- **Study steering (Focus picker + Test Mode + deck-starring)**: StudyTab start screen has a Focus picker (subject + topic) and a size choice — Quick (5) / Full (20) / Test Mode (30, or 40 with a topic focus). A focused session skips subject-diversity balancing and drills only the chosen subject/topic. Admins star decks per student in AdminDashboard (`deck_priorities`); starred-deck cards are ordered first in that student's sessions. Selection logic is the pure, unit-tested `app/lib/session-builder.ts`. Replaced the old temporary profile-subjects hack.
+- **Daily goal / streak**: goal is met at 20 cards **reviewed** (not correct) — `daily-progress` uses `cards_reviewed >= 20`. Change was forward-only (no backfill of historical `goal_met`).
 - **Dashboard (student)**: iOS-native style (white cards on #f2f2f7 bg, shadow-only, no borders). Shows: needs attention (overdue), upcoming tests (auto-detect + manual add), due this week, grades (3-col grid), daily goal. All assignments have "Done" button to dismiss (persisted in canvas_cache). Overdue capped at 14 days.
 - **Answer checking**: Fuzzy matching — strips filler words (the, a, an, is...), word-order tolerance (80% word overlap), Levenshtein ≤2 after stripping.
 - **Card import**: CSV/image → preview → AI enrich (batches of 3) → dedup → save.
 - **Points economy**: Earn from sessions (10)/daily goal (50)/accuracy/streaks/memory improvement → spend on rewards → parent approval gate. All server-side via SUPABASE_SERVICE_ROLE_KEY.
 - **Learning ladder**: Per-topic L1-L5 progression, level up at ≥80% accuracy on 10+ cards.
 - **Session save guard**: `savingRef` prevents duplicate API calls on session complete. `sessionAnswers` array is source of truth for counts (not React state).
+- **IMPORTANT — no module-scope env-dependent init in routes**: Next.js 16's build (Turbopack) evaluates each route module during "collect configuration" and prerenders pages. Do NOT instantiate env-dependent clients at module scope in `app/api/**/route.ts` — it throws when env is absent during that pass and fails the Vercel build. Use the lazy helpers: `supabaseService` from `app/lib/supabase/service.ts` (Proxy; `createClient` fires on first use) and `getWebPush()` from `app/lib/push.ts`. The browser client (`app/lib/supabase/client.ts`) is already lazy (inside a function). Create any new client/SDK inside the handler, never as a module-scope `const`.
 
 ## Testing
 
 ```bash
 cd recall-app
-node --experimental-strip-types test-unit.ts    # 86 pure logic tests (FSRS, answer checking, accumulation, save guard)
-node test-integration.mjs                        # 41 API integration tests (creates/cleans test user automatically)
+node --experimental-strip-types test-unit.ts    # 98 pure logic tests (FSRS, answer checking, accumulation, save guard, session-builder)
+node test-integration.mjs                        # 47 API integration tests (creates/cleans test user; needs dev server on :3001)
 node_modules/.bin/tsc --noEmit                   # TypeScript type check
 ```
 
-Always run all three before committing.
+Always run all three before committing. NOTE: none of these exercise the production build — build-time failures (config collection, prerendering) only surface via `yarn build` (Vercel), so run that for any build/deploy issue.
 
 ## Design System
 
