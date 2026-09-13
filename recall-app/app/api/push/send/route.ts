@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseService as supabase } from "../../../lib/supabase/service";
-import webpush from "web-push";
-
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+import { getWebPush } from "../../../lib/push";
 
 
 export async function POST(request: Request) {
+  const webpush = getWebPush();
   const { userId, title, body, url = "/" } = await request.json();
 
   if (!title || !body) {
