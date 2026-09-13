@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseService as supabase } from "../../lib/supabase/service";
 import { MASTERY_CELEBRATION_THRESHOLD } from "../../lib/supabase/db-types";
 
 const DECAY = -0.5;
 const FACTOR = 19 / 81;
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 function getRetrievability(stability: number, lastReviewAt: string): number {
   if (stability <= 0) return 0;

@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseService as supabase } from "../../../lib/supabase/service";
 
 const CANVAS_BASE = process.env.CANVAS_BASE_URL || "https://cuhsd.instructure.com/api/v1";
 const TOKEN = process.env.CANVAS_API_TOKEN || "";
 const EXCLUDED_COURSE_IDS = [29747];
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 async function canvasFetch(path: string) {
   const res = await fetch(`${CANVAS_BASE}${path}`, {

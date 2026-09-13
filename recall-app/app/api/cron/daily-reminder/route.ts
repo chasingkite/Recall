@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseService as supabase } from "../../../lib/supabase/service";
 import webpush from "web-push";
 
 webpush.setVapidDetails(
@@ -8,10 +8,6 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY!
 );
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
