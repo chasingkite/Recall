@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseService as supabase } from "../../../lib/supabase/service";
-import webpush from "web-push";
-
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+import { getWebPush } from "../../../lib/push";
 
 
 export async function GET(request: Request) {
+  const webpush = getWebPush();
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
