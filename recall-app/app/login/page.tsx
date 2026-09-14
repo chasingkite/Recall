@@ -2,6 +2,9 @@
 
 import { createClient } from "../lib/supabase/client";
 
+// Auth page — client-only, must not be statically prerendered (createClient needs runtime env).
+export const dynamic = "force-dynamic";
+
 export default function LoginPage() {
   const supabase = createClient();
 
