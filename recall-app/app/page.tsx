@@ -10,6 +10,9 @@ import AdminTab from "./components/AdminTab";
 import AdminDashboard from "./components/AdminDashboard";
 import NotificationPrompt from "./components/NotificationPrompt";
 
+// Auth-gated client SPA — must not be statically prerendered (createClient needs runtime env).
+export const dynamic = "force-dynamic";
+
 type Tab = "dashboard" | "study" | "progress" | "rewards" | "admin";
 
 interface Profile {
