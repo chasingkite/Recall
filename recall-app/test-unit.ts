@@ -142,6 +142,28 @@ function testAnswerChecking() {
   // Empty answer
   r = checkAnswer("", "hello");
   assert(r.correct === false, "Empty answer = wrong");
+
+  // Numeric answers are exact, not fuzzy
+  r = checkAnswer("38", "37");
+  assert(r.correct === false, "Numeric: 38 is not 37 (no Levenshtein for numbers)");
+
+  r = checkAnswer("13.6", "13.7");
+  assert(r.correct === false, "Numeric: 13.6 is not 13.7");
+
+  r = checkAnswer("5/12", "5/13");
+  assert(r.correct === false, "Numeric: 5/12 is not 5/13");
+
+  r = checkAnswer("8", "8.0");
+  assert(r.correct === true, "Numeric: 8 equals 8.0");
+
+  r = checkAnswer("10/26", "5/13");
+  assert(r.correct === true, "Numeric: unsimplified fraction equals simplified");
+
+  r = checkAnswer("37°", "37");
+  assert(r.correct === true, "Numeric: degree sign ignored");
+
+  r = checkAnswer("-3", "3");
+  assert(r.correct === false, "Numeric: sign matters");
 }
 
 // ==================== Normalize Answer ====================

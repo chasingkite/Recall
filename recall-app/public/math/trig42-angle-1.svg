@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" font-family="-apple-system, Helvetica, Arial, sans-serif">
+  <rect width="320" height="240" fill="#ffffff"/>
+  <polygon points="53.3,200.0 266.7,200.0 266.7,40.0" fill="#eef4ff" stroke="#007aff" stroke-width="3" stroke-linejoin="round"/>
+  <polyline points="254.7,200.0 254.7,188.0 266.7,188.0" fill="none" stroke="#007aff" stroke-width="2"/>
+  <text x="286.7" y="126.3" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">12</text>
+  <text x="148.0" y="110.3" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">20</text>
+  <path d="M 81.3,200.0 A 28,28 0 0 0 75.7,183.2" fill="none" stroke="#ff3b30" stroke-width="2.5"/>
+  <text x="102.7" y="189.9" font-size="18" font-weight="700" text-anchor="middle" fill="#ff3b30">?</text>
+</svg>

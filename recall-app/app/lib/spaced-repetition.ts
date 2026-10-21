@@ -161,6 +161,14 @@ export function checkAnswer(userAnswer: string, correctAnswer: string): { correc
   const b = normalizeAnswer(cleaned);
   const bFull = normalizeAnswer(correctAnswer);
 
+  // Numeric answers (decimals, fractions, optional degree sign) must match exactly as numbers.
+  // Fuzzy matching would otherwise accept 38 for 37, 13.6 for 13.7, or 5/12 for 5/13.
+  const numA = parseNumeric(a);
+  const numB = parseNumeric(b);
+  if (numA !== null && numB !== null) {
+    return { correct: Math.abs(numA - numB) < 1e-9, close: false };
+  }
+
   // Check against cleaned version first
   if (a === b) return { correct: true, close: false };
   if (levenshtein(a, b) <= 1) return { correct: true, close: true };
@@ -186,6 +194,15 @@ export function checkAnswer(userAnswer: string, correctAnswer: string): { correc
   }
 
   return { correct: false, close: false };
+}
+
+function parseNumeric(text: string): number | null {
+  const m = text.replace(/\s*(°|degrees?|deg)$/, "").trim().match(/^(-?\d+(?:\.\d+)?)(?:\/(\d+(?:\.\d+)?))?$/);
+  if (!m) return null;
+  const num = parseFloat(m[1]);
+  if (m[2] === undefined) return num;
+  const den = parseFloat(m[2]);
+  return den === 0 ? null : num / den;
 }
 
 function levenshtein(a: string, b: string): number {

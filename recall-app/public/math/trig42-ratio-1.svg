@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" font-family="-apple-system, Helvetica, Arial, sans-serif">
+  <rect width="320" height="240" fill="#ffffff"/>
+  <polygon points="50.0,165.8 270.0,165.8 270.0,74.2" fill="#eef4ff" stroke="#007aff" stroke-width="3" stroke-linejoin="round"/>
+  <polyline points="258.0,165.8 258.0,153.8 270.0,153.8" fill="none" stroke="#007aff" stroke-width="2"/>
+  <text x="160.0" y="192.1" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">12</text>
+  <text x="290.0" y="126.3" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">5</text>
+  <text x="152.3" y="107.8" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">13</text>
+  <text x="32.4" y="175.8" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">A</text>
+  <text x="286.6" y="179.1" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">B</text>
+  <text x="283.8" y="68.9" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">C</text>
+</svg>
