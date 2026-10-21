@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" font-family="-apple-system, Helvetica, Arial, sans-serif">
+  <rect width="320" height="240" fill="#ffffff"/>
+  <rect x="46" y="30" width="228" height="180" rx="14" fill="#eef4ff" stroke="#34c759" stroke-width="8"/>
+  <rect x="56" y="40" width="208" height="160" rx="10" fill="none" stroke="#007aff" stroke-width="2.5"/>
+  <rect x="112" y="72" width="104" height="104" rx="22" fill="#cfe8ff" stroke="#5ac8fa" stroke-width="3"/>
+  <circle cx="82" cy="78" r="20" fill="#e5e4fa" stroke="#5856d6" stroke-width="3"/>
+  <circle cx="78" cy="74" r="6" fill="#5856d6" opacity="0.55"/>
+  <ellipse cx="240" cy="72" rx="16" ry="9" fill="#c8f0d2" stroke="#34c759" stroke-width="2.5"/>
+  <line x1="232" y1="72" x2="248" y2="72" stroke="#34c759" stroke-width="2"/>
+  <ellipse cx="240" cy="150" rx="16" ry="9" fill="#c8f0d2" stroke="#34c759" stroke-width="2.5"/>
+  <line x1="232" y1="150" x2="248" y2="150" stroke="#34c759" stroke-width="2"/>
+  <ellipse cx="84" cy="150" rx="16" ry="9" fill="#c8f0d2" stroke="#34c759" stroke-width="2.5"/>
+  <line x1="76" y1="150" x2="92" y2="150" stroke="#34c759" stroke-width="2"/>
+  <g transform="rotate(0 166 190)">
+    <ellipse cx="166" cy="190" rx="14" ry="7" fill="#ffe3c2" stroke="#ff9500" stroke-width="2.5"/>
+    <path d="M 158,190 q 4,-7 8,0 t 8,0 t 8,0" fill="none" stroke="#ff9500" stroke-width="2"/>
+  </g>
+  <g data-pin="A" data-organelle="Cell wall">
+    <line x1="36.0" y1="56.0" x2="46" y2="56" stroke="#1c1c1e" stroke-width="2"/>
+    <circle cx="46" cy="56" r="3.5" fill="#1c1c1e"/>
+    <circle cx="22" cy="56" r="14" fill="#ffffff" stroke="#1c1c1e" stroke-width="2.5"/>
+    <text x="22" y="62.5" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">A</text>
+  </g>
+  <g data-pin="B" data-organelle="Cell membrane">
+    <line x1="36.0" y1="140.0" x2="56" y2="140" stroke="#1c1c1e" stroke-width="2"/>
+    <circle cx="56" cy="140" r="3.5" fill="#1c1c1e"/>
+    <circle cx="22" cy="140" r="14" fill="#ffffff" stroke="#1c1c1e" stroke-width="2.5"/>
+    <text x="22" y="146.5" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">B</text>
+  </g>
+  <g data-pin="C" data-organelle="Nucleus">
+    <line x1="82.0" y1="28.0" x2="82" y2="58" stroke="#1c1c1e" stroke-width="2"/>
+    <circle cx="82" cy="58" r="3.5" fill="#1c1c1e"/>
+    <circle cx="82" cy="14" r="14" fill="#ffffff" stroke="#1c1c1e" stroke-width="2.5"/>
+    <text x="82" y="20.5" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">C</text>
+  </g>
+  <g data-pin="D" data-organelle="Chloroplast">
+    <line x1="282.2" y1="64.5" x2="252" y2="70" stroke="#1c1c1e" stroke-width="2"/>
+    <circle cx="252" cy="70" r="3.5" fill="#1c1c1e"/>
+    <circle cx="296" cy="62" r="14" fill="#ffffff" stroke="#1c1c1e" stroke-width="2.5"/>
+    <text x="296" y="68.5" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">D</text>
+  </g>
+  <g data-pin="E" data-organelle="Large central vacuole">
+    <line x1="282.0" y1="124.0" x2="214" y2="124" stroke="#1c1c1e" stroke-width="2"/>
+    <circle cx="214" cy="124" r="3.5" fill="#1c1c1e"/>
+    <circle cx="296" cy="124" r="14" fill="#ffffff" stroke="#1c1c1e" stroke-width="2.5"/>
+    <text x="296" y="130.5" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">E</text>
+  </g>
+  <g data-pin="F" data-organelle="Mitochondrion">
+    <line x1="231.3" y1="216.2" x2="178" y2="192" stroke="#1c1c1e" stroke-width="2"/>
+    <circle cx="178" cy="192" r="3.5" fill="#1c1c1e"/>
+    <circle cx="244" cy="222" r="14" fill="#ffffff" stroke="#1c1c1e" stroke-width="2.5"/>
+    <text x="244" y="228.5" font-size="18" font-weight="700" text-anchor="middle" fill="#1c1c1e">F</text>
+  </g>
+</svg>
