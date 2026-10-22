@@ -37,3 +37,26 @@ export function orderByStarred<T extends BuilderCard>(cards: T[], starredDeckIds
   const rest = cards.filter((c) => !starredDeckIds.has(c.deck_id));
   return [...starred, ...rest];
 }
+
+/**
+ * For each "locked" subject, keep only cards from the student's starred decks. Other subjects
+ * are untouched. A lock is ignored (that subject keeps all its cards) when the student has no
+ * starred deck with cards in that subject, so a lock can never empty a subject.
+ */
+export function restrictToStarredDecks<T extends BuilderCard>(
+  cards: T[],
+  starredDeckIds: Set<string>,
+  lockedSubjects: Set<string>
+): T[] {
+  if (lockedSubjects.size === 0 || starredDeckIds.size === 0) return cards;
+  const effective = new Set(
+    [...lockedSubjects].filter((subj) =>
+      cards.some((c) => c.decks?.subject === subj && starredDeckIds.has(c.deck_id))
+    )
+  );
+  if (effective.size === 0) return cards;
+  return cards.filter((c) => {
+    const subj = c.decks?.subject;
+    return !subj || !effective.has(subj) || starredDeckIds.has(c.deck_id);
+  });
+}

@@ -209,3 +209,10 @@ create policy "deck_priorities_admin_all" on deck_priorities
 -- A student may read their own rows
 create policy "deck_priorities_read_own" on deck_priorities
   for select using (user_id = auth.uid());
+
+
+-- ============ profiles.starred_only_subjects: limit a student to starred decks per subject ============
+-- A subject listed here makes smart-session draw ONLY from that student's starred decks in that
+-- subject (e.g. {english} + starred "Of Mice and Men" = English sessions use that deck only).
+-- Ignored for a subject if the student has no starred deck with cards in it. Safe to run twice.
+alter table profiles add column if not exists starred_only_subjects text[] not null default '{}';
