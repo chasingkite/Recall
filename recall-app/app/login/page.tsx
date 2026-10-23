@@ -1,12 +1,27 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 
 // Auth page — client-only, must not be statically prerendered (createClient needs runtime env).
 export const dynamic = "force-dynamic";
 
+// Shown when /auth/callback sends the user back with ?error=<code>.
+const ERROR_MESSAGES: Record<string, string> = {
+  exchange: "Sign-in didn't finish. Please tap the button and try again.",
+  provider: "Google couldn't sign you in. Please try again.",
+  missing_code: "Sign-in didn't finish. Please tap the button and try again.",
+};
+
 export default function LoginPage() {
   const supabase = createClient();
+  const [error, setError] = useState<string | null>(null);
+
+  // Read the error code on the client (avoids useSearchParams, which needs a Suspense boundary at build time).
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("error");
+    if (code) setError(ERROR_MESSAGES[code] ?? "Sign-in didn't finish. Please try again.");
+  }, []);
 
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
@@ -22,6 +37,10 @@ export default function LoginPage() {
       <div className="max-w-sm w-full text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Recall</h1>
         <p className="text-sm text-gray-500 mb-8">Study smarter with spaced repetition</p>
+
+        {error && (
+          <p role="alert" className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+        )}
 
         <button
           onClick={signInWithGoogle}

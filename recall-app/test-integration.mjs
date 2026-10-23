@@ -289,6 +289,20 @@ async function testValidation() {
   assert((await api(`${BASE}/api/study-sheet`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) })).status === 400, "study-sheet empty → 400");
 }
 
+async function testAuthCallback() {
+  console.log("\n🔐 Auth Callback (failures must not look like success)");
+  const hop = async (qs) => {
+    const r = await fetch(`${BASE}/auth/callback${qs}`, { redirect: "manual" });
+    return { status: r.status, location: r.headers.get("location") || "" };
+  };
+  let r = await hop("");
+  assert(r.status >= 300 && r.status < 400 && r.location.endsWith("/login?error=missing_code"), "No code → /login?error=missing_code", `${r.status} ${r.location}`);
+  r = await hop("?error=access_denied&error_description=nope");
+  assert(r.location.endsWith("/login?error=provider"), "Provider error → /login?error=provider", r.location);
+  r = await hop("?code=not-a-real-code");
+  assert(r.location.endsWith("/login?error=exchange"), "Bad code (no PKCE cookie) → /login?error=exchange", r.location);
+}
+
 async function testSessionFocus() {
   console.log("\n🎯 Session Focus + Test Mode");
   // Topic focus: only the requested topic comes back
@@ -346,6 +360,7 @@ async function main() {
   try {
     await setup();
     await testSmartSession();
+    await testAuthCallback();
     await testSessionFocus();
     await testDeckPriorities();
     await testDailyProgress();
