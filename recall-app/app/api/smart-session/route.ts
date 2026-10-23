@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getSessionSize, selectFocusCards, orderByStarred } from "../../lib/session-builder";
+import { getSessionSize, selectFocusCards, orderByStarred, restrictToStarredDecks } from "../../lib/session-builder";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 
@@ -74,8 +74,8 @@ export async function GET(request: Request) {
   } else {
     cardQuery = supabase.from("cards").select("id, front, back, topic, answer_type, choices, deck_id, decks(subject)").order("created_at");
   }
-  const { data: cards } = await cardQuery;
-  if (!cards || cards.length === 0) {
+  const { data: fetchedCards } = await cardQuery;
+  if (!fetchedCards || fetchedCards.length === 0) {
     return NextResponse.json({ cards: [], assignments: [], matchedTopics: [], dueCount: 0, unseenCount: 0, totalDue: 0 });
   }
 
@@ -96,6 +96,19 @@ export async function GET(request: Request) {
     ? await supabase.from("deck_priorities").select("deck_id").eq("user_id", userId).eq("starred", true)
     : { data: null };
   const starredDeckIds = new Set<string>((starRows || []).map((r: any) => r.deck_id));
+
+  // Subjects where this student only studies their starred decks (profiles.starred_only_subjects).
+  // Queried on its own so a missing column (migration not yet run) cannot break the profile lookup above.
+  let lockedSubjects = new Set<string>();
+  if (userId) {
+    const { data: scope, error: scopeErr } = await supabase
+      .from("profiles")
+      .select("starred_only_subjects")
+      .eq("id", userId)
+      .single();
+    if (!scopeErr) lockedSubjects = new Set<string>(scope?.starred_only_subjects || []);
+  }
+  const cards: any[] = restrictToStarredDecks(fetchedCards as any, starredDeckIds, lockedSubjects);
 
   const nowStr = new Date().toISOString();
   const dueCards: any[] = [];

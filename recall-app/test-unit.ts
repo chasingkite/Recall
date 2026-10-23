@@ -21,6 +21,7 @@ import {
   getSessionSize,
   selectFocusCards,
   orderByStarred,
+  restrictToStarredDecks,
   type BuilderCard,
 } from "./app/lib/session-builder.ts";
 
@@ -401,6 +402,30 @@ function testSessionBuilder() {
   assert(ordered[0].id === "y", "starred-deck card sorts first");
   assert(ordered.length === 3, "orderByStarred keeps all cards");
   assert(orderByStarred(pool, new Set()).map((c) => c.id).join("") === "xyz", "no stars = original order");
+
+  // restrictToStarredDecks — "starred decks only" per subject
+  const mixed: BuilderCard[] = [
+    { id: "e1", topic: "t", deck_id: "omam", decks: { subject: "english" } },
+    { id: "e2", topic: "t", deck_id: "sniper", decks: { subject: "english" } },
+    { id: "e3", topic: "t", deck_id: "cask", decks: { subject: "english" } },
+    { id: "m1", topic: "t", deck_id: "tangent", decks: { subject: "math" } },
+    { id: "b1", topic: "t", deck_id: "eco", decks: { subject: "biology" } },
+  ];
+  const ids = (cs: BuilderCard[]) => cs.map((c) => c.id).join(",");
+  const lockedEnglish = restrictToStarredDecks(mixed, new Set(["omam"]), new Set(["english"]));
+  assert(ids(lockedEnglish) === "e1,m1,b1", "locked english keeps only the starred english deck; other subjects untouched");
+  assert(ids(restrictToStarredDecks(mixed, new Set(["omam"]), new Set())) === ids(mixed), "no locked subjects = no filtering");
+  assert(ids(restrictToStarredDecks(mixed, new Set(), new Set(["english"]))) === ids(mixed), "no starred decks = lock ignored");
+  assert(
+    ids(restrictToStarredDecks(mixed, new Set(["tangent"]), new Set(["english"]))) === ids(mixed),
+    "lock is ignored when no starred deck has cards in that subject (never empties a subject)"
+  );
+  assert(
+    ids(restrictToStarredDecks(mixed, new Set(["omam", "tangent"]), new Set(["english", "math"]))) === "e1,m1,b1",
+    "multiple locked subjects each keep their starred decks"
+  );
+  const noDecks: BuilderCard[] = [{ id: "n1", topic: "t", deck_id: "orphan", decks: null }];
+  assert(restrictToStarredDecks(noDecks, new Set(["omam"]), new Set(["english"])).length === 1, "cards without a subject are never dropped");
 }
 
 // ==================== MAIN ====================
